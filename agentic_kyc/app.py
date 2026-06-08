@@ -83,8 +83,9 @@ def main() -> None:
 
 def render_onboarding() -> None:
     st.subheader("Customer Onboarding")
-    pan_file = st.file_uploader("Upload PAN PDF", type=["pdf"], key="pan_pdf")
-    aadhaar_file = st.file_uploader("Upload Aadhaar PDF", type=["pdf"], key="aadhaar_pdf")
+    supported_types = ["pdf", "png", "jpg", "jpeg", "webp"]
+    pan_file = st.file_uploader("Upload PAN document", type=supported_types, key="pan_pdf")
+    aadhaar_file = st.file_uploader("Upload Aadhaar document", type=supported_types, key="aadhaar_pdf")
 
     sample_pan = SAMPLES_DIR / "sample_pan.pdf"
     sample_aadhaar = SAMPLES_DIR / "sample_aadhaar.pdf"
@@ -94,6 +95,11 @@ def render_onboarding() -> None:
         f"LLM endpoint: {os.getenv('BASE_URL', 'http://localhost:8000/v1')} | "
         f"Model: {os.getenv('MODEL_NAME', 'Qwen/Qwen2.5-7B-Instruct')}"
     )
+    if "vl" not in os.getenv("MODEL_NAME", "").lower():
+        st.warning(
+            "For scanned PDFs or image uploads, run a vision-capable vLLM model such as "
+            "Qwen/Qwen2.5-VL-7B-Instruct. Text PDFs still work with the current model."
+        )
 
     if st.button("Run KYC Analysis", type="primary", use_container_width=True):
         with st.spinner("Agents are collaborating on the KYC case..."):

@@ -46,6 +46,33 @@ AADHAAR_TEXT:
         except Exception:
             return rule_based_extract(pan_text, aadhaar_text)
 
+    def extract_text_from_image(self, image_b64: str, mime_type: str = "image/png") -> str:
+        prompt = (
+            "Read this Indian KYC document image. Extract all visible text exactly enough for downstream "
+            "KYC parsing. Include name, date of birth, PAN number, Aadhaar number, and address if present."
+        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{mime_type};base64,{image_b64}"},
+                            },
+                        ],
+                    }
+                ],
+                temperature=0,
+                max_tokens=900,
+            )
+            return response.choices[0].message.content or ""
+        except Exception:
+            return ""
+
 
 def parse_json_object(text: str) -> dict[str, Any]:
     text = text.strip()
