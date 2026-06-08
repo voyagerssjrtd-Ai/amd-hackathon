@@ -1,0 +1,4 @@
+name,dob,pan_number,aadhaar_number,reason,severity
+Rajesh Malhotra,1980-04-14,ABCPM1234F,XXXX-XXXX-1122,Politically exposed person,MEDIUM
+Nisha Varma,1992-11-22,BNZPV5555K,XXXX-XXXX-7788,Adverse media match,HIGH
+Arun Mehta,1975-01-02,AMXPM9876Q,XXXX-XXXX-3344,Sanctions proximity review,HIGH

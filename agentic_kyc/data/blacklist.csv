@@ -1,0 +1,3 @@
+name,dob,pan_number,aadhaar_number,reason,severity
+Vikram Sethi,1988-09-30,VIKPS1234L,XXXX-XXXX-9001,Fraudulent onboarding attempt,HIGH
+Karan Bedi,1979-06-08,KARPB4321D,XXXX-XXXX-4567,Confirmed AML block,HIGH
