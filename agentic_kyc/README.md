@@ -15,6 +15,18 @@ Complete 5-day hackathon MVP for agentic customer due diligence using Streamlit,
 - Downloadable PDF audit report
 - Agent execution timeline in the Streamlit dashboard
 
+## Agent Reasoning Model
+
+The platform uses an LLM-first agent design:
+
+- Document Agent asks the multimodal LLM to extract each document separately.
+- Identity Agent asks the LLM to compare PAN evidence against Aadhaar evidence.
+- Compliance Agent uses deterministic CSV screening for evidence, then asks the LLM to interpret the findings.
+- Risk Agent asks the LLM for an explainable risk score.
+- Decision Agent asks the LLM for the final recommendation.
+
+Deterministic guardrails are still applied after LLM outputs for demo safety. For example, missing PAN number can never be approved, blacklist hits always escalate, and watchlist hits always require review.
+
 ## Project Structure
 
 ```text

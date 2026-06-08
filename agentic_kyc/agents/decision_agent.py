@@ -1,7 +1,34 @@
 from __future__ import annotations
 
 
+from services.llm_service import LLMService
+
+
 def run_decision_agent(state: dict) -> dict:
+    payload = {
+        "extracted_data": state.get("extracted_data", {}),
+        "pan_data": state.get("pan_data", {}),
+        "aadhaar_data": state.get("aadhaar_data", {}),
+        "identity_result": state.get("identity_result", {}),
+        "compliance_result": state.get("compliance_result", {}),
+        "risk_result": state.get("risk_result", {}),
+    }
+    try:
+        result = enforce_decision_gates(LLMService().make_decision(payload), payload)
+    except Exception:
+        result = fallback_decision(state)
+    timeline = state.get("timeline", [])
+    timeline.append(
+        {
+            "agent": "Decision Agent",
+            "status": "completed",
+            "summary": f"Recommended {result['recommendation']}.",
+        }
+    )
+    return {**state, "decision_result": result, "timeline": timeline}
+
+
+def fallback_decision(state: dict) -> dict:
     risk = state.get("risk_result", {})
     compliance = state.get("compliance_result", {})
     identity = state.get("identity_result", {})
@@ -30,12 +57,45 @@ def run_decision_agent(state: dict) -> dict:
             "finding_count": len(findings),
         },
     }
-    timeline = state.get("timeline", [])
-    timeline.append(
+    return enforce_decision_gates(
+        result,
         {
-            "agent": "Decision Agent",
-            "status": "completed",
-            "summary": f"Recommended {recommendation}.",
+            "extracted_data": state.get("extracted_data", {}),
+            "pan_data": state.get("pan_data", {}),
+            "compliance_result": compliance,
+            "risk_result": risk,
+            "identity_result": identity,
+        },
+    )
+
+
+def enforce_decision_gates(result: dict, payload: dict) -> dict:
+    extracted = payload.get("extracted_data", {})
+    pan_data = payload.get("pan_data", {})
+    findings = payload.get("compliance_result", {}).get("findings", [])
+    risk = payload.get("risk_result", {})
+
+    if any(item.get("source") == "blacklist" for item in findings):
+        result["recommendation"] = "ESCALATE"
+        result["explanation"] = "Blacklist evidence requires compliance escalation."
+    elif not extracted.get("pan_number") or not pan_data.get("name"):
+        result["recommendation"] = "REVIEW"
+        result["explanation"] = "PAN extraction is incomplete; a human reviewer must validate the PAN document."
+    elif int(risk.get("risk_score", 100)) >= 80:
+        result["recommendation"] = "ESCALATE"
+    elif int(risk.get("risk_score", 100)) >= 40:
+        result["recommendation"] = "REVIEW"
+
+    evidence = result.get("evidence", {})
+    if not isinstance(evidence, dict):
+        evidence = {}
+    evidence.update(
+        {
+            "pan_number_present": bool(extracted.get("pan_number")),
+            "pan_name_present": bool(pan_data.get("name")),
+            "risk_score": risk.get("risk_score"),
+            "risk_level": risk.get("risk_level"),
         }
     )
-    return {**state, "decision_result": result, "timeline": timeline}
+    result["evidence"] = evidence
+    return result

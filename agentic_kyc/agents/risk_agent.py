@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+from services.llm_service import LLMService
 from services.scoring_service import calculate_risk
 
 
 def run_risk_agent(state: dict) -> dict:
-    result = calculate_risk(
-        state.get("extracted_data", {}),
-        state.get("identity_result", {}),
-        state.get("compliance_result", {}),
-    )
+    payload = {
+        "extracted_data": state.get("extracted_data", {}),
+        "pan_data": state.get("pan_data", {}),
+        "aadhaar_data": state.get("aadhaar_data", {}),
+        "identity_result": state.get("identity_result", {}),
+        "compliance_result": state.get("compliance_result", {}),
+    }
+    try:
+        result = enforce_risk_gates(LLMService().score_risk(payload), payload)
+    except Exception:
+        result = calculate_risk(
+            state.get("extracted_data", {}),
+            state.get("identity_result", {}),
+            state.get("compliance_result", {}),
+            state.get("pan_data", {}),
+            state.get("aadhaar_data", {}),
+        )
     timeline = state.get("timeline", [])
     timeline.append(
         {
@@ -18,3 +31,35 @@ def run_risk_agent(state: dict) -> dict:
         }
     )
     return {**state, "risk_result": result, "timeline": timeline}
+
+
+def enforce_risk_gates(result: dict, payload: dict) -> dict:
+    extracted = payload.get("extracted_data", {})
+    pan_data = payload.get("pan_data", {})
+    findings = payload.get("compliance_result", {}).get("findings", [])
+    reasons = result.get("reasons", [])
+    score = int(result.get("risk_score", 100))
+
+    if not extracted.get("pan_number"):
+        score = max(score, 55)
+        reasons.append("PAN number missing; approval is blocked pending reviewer validation")
+    if not pan_data.get("name") and not extracted.get("pan_number"):
+        score = max(score, 70)
+        reasons.append("PAN document image/text was not reliably extracted")
+    if any(item.get("source") == "watchlist" for item in findings):
+        score = max(score, 65)
+    if any(item.get("source") == "blacklist" for item in findings):
+        score = max(score, 90)
+
+    level = "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW"
+    return {"risk_score": score, "risk_level": level, "reasons": dedupe(reasons)}
+
+
+def dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    output: list[str] = []
+    for item in items:
+        if item and item not in seen:
+            seen.add(item)
+            output.append(item)
+    return output

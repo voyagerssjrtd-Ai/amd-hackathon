@@ -6,14 +6,29 @@ from rapidfuzz import fuzz
 REQUIRED_FIELDS = ["name", "dob", "pan_number", "aadhaar_number", "address"]
 
 
-def identity_score(data: dict[str, str], pan_text: str, aadhaar_text: str) -> dict:
+def identity_score(
+    data: dict[str, str],
+    pan_text: str,
+    aadhaar_text: str,
+    pan_data: dict | None = None,
+    aadhaar_data: dict | None = None,
+) -> dict:
     issues: list[str] = []
+    pan_data = pan_data or {}
+    aadhaar_data = aadhaar_data or {}
     extracted_name = data.get("name", "")
-    pan_name = field_from_text(pan_text, ["name", "customer name"])
-    aadhaar_name = field_from_text(aadhaar_text, ["name", "customer name"])
-    pan_dob = field_from_text(pan_text, ["date of birth", "dob", "birth date"])
-    aadhaar_dob = field_from_text(aadhaar_text, ["date of birth", "dob", "birth date"])
-    aadhaar_address = field_from_text(aadhaar_text, ["address"])
+    pan_name = pan_data.get("name") or field_from_text(pan_text, ["name", "customer name"])
+    aadhaar_name = aadhaar_data.get("name") or field_from_text(aadhaar_text, ["name", "customer name"])
+    pan_dob = pan_data.get("dob") or field_from_text(pan_text, ["date of birth", "dob", "birth date"])
+    aadhaar_dob = aadhaar_data.get("dob") or field_from_text(aadhaar_text, ["date of birth", "dob", "birth date"])
+    aadhaar_address = aadhaar_data.get("address") or field_from_text(aadhaar_text, ["address"])
+
+    if not pan_data.get("pan_number") and not data.get("pan_number"):
+        issues.append("PAN number missing from PAN document")
+    if not pan_name:
+        issues.append("PAN name missing from PAN document")
+    if not pan_dob:
+        issues.append("PAN DOB missing from PAN document")
 
     name_similarity = max(
         fuzz.token_sort_ratio(extracted_name, pan_name),
@@ -40,6 +55,12 @@ def identity_score(data: dict[str, str], pan_text: str, aadhaar_text: str) -> di
     score -= 20 if any("DOB mismatch" in issue for issue in issues) else 0
     score -= 15 if address_similarity < 70 else 0
     score -= len(missing) * 8
+    if not pan_data.get("pan_number") and not data.get("pan_number"):
+        score -= 35
+    if not pan_name:
+        score -= 20
+    if not pan_dob:
+        score -= 15
     return {
         "identity_match_score": max(0, min(100, round(score))),
         "issues": issues,
@@ -58,8 +79,12 @@ def calculate_risk(
     extracted_data: dict[str, str],
     identity_result: dict,
     compliance_result: dict,
+    pan_data: dict | None = None,
+    aadhaar_data: dict | None = None,
 ) -> dict:
     score = 10
+    pan_data = pan_data or {}
+    aadhaar_data = aadhaar_data or {}
     reasons = ["PAN extracted successfully" if extracted_data.get("pan_number") else "PAN number missing"]
     reasons.append(
         "Aadhaar extracted successfully" if extracted_data.get("aadhaar_number") else "Aadhaar number missing"
@@ -69,6 +94,12 @@ def calculate_risk(
     if missing:
         score += len(missing) * 12
         reasons.append(f"Missing fields detected: {', '.join(missing)}")
+    if not extracted_data.get("pan_number"):
+        score = max(score, 55)
+        reasons.append("PAN number is mandatory for approval; case requires reviewer attention")
+    if not pan_data.get("name") and not extracted_data.get("pan_number"):
+        score = max(score, 70)
+        reasons.append("PAN document extraction did not provide enough core identity evidence")
 
     identity_score_value = identity_result.get("identity_match_score", 0)
     if identity_score_value < 85:

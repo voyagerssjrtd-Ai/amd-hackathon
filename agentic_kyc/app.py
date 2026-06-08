@@ -34,6 +34,8 @@ class KYCState(TypedDict, total=False):
     aadhaar_path: str
     pan_text: str
     aadhaar_text: str
+    pan_data: dict[str, Any]
+    aadhaar_data: dict[str, Any]
     extracted_data: dict[str, str]
     identity_result: dict[str, Any]
     compliance_result: dict[str, Any]
@@ -152,6 +154,18 @@ def render_results() -> None:
         hide_index=True,
         use_container_width=True,
     )
+
+    st.markdown("#### Document Extraction Evidence")
+    e1, e2 = st.columns(2)
+    with e1:
+        st.write("PAN extraction")
+        st.json(mask_sensitive_payload(state.get("pan_data", {})))
+    with e2:
+        st.write("Aadhaar extraction")
+        st.json(mask_sensitive_payload(state.get("aadhaar_data", {})))
+
+    if not extracted.get("pan_number"):
+        st.error("PAN number was not extracted. The case must be REVIEW until PAN is manually validated or re-uploaded.")
 
     c1, c2 = st.columns(2)
     with c1:
@@ -335,6 +349,13 @@ def render_styles() -> None:
 def mask_aadhaar(value: str) -> str:
     digits = "".join(ch for ch in value if ch.isdigit())
     return f"XXXX-XXXX-{digits[-4:]}" if len(digits) >= 4 else ""
+
+
+def mask_sensitive_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    masked = dict(payload)
+    if masked.get("aadhaar_number"):
+        masked["aadhaar_number"] = mask_aadhaar(str(masked["aadhaar_number"]))
+    return masked
 
 
 if __name__ == "__main__":

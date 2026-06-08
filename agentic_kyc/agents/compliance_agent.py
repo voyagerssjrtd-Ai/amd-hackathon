@@ -5,6 +5,8 @@ from pathlib import Path
 
 from rapidfuzz import fuzz
 
+from services.llm_service import LLMService
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -14,7 +16,11 @@ def run_compliance_agent(state: dict) -> dict:
     findings = []
     findings.extend(screen_file(ROOT_DIR / "data" / "watchlist.csv", "watchlist", data))
     findings.extend(screen_file(ROOT_DIR / "data" / "blacklist.csv", "blacklist", data))
-    result = {"status": "REVIEW" if findings else "CLEAR", "findings": findings}
+    payload = {"customer": data, "candidate_findings": findings}
+    try:
+        result = enforce_compliance_gates(LLMService().assess_compliance(payload), findings)
+    except Exception:
+        result = {"status": "REVIEW" if findings else "CLEAR", "findings": findings}
     timeline = state.get("timeline", [])
     timeline.append(
         {
@@ -24,6 +30,12 @@ def run_compliance_agent(state: dict) -> dict:
         }
     )
     return {**state, "compliance_result": result, "timeline": timeline}
+
+
+def enforce_compliance_gates(result: dict, findings: list[dict]) -> dict:
+    if findings:
+        return {"status": "REVIEW", "findings": findings}
+    return {"status": "CLEAR", "findings": []}
 
 
 def screen_file(path: Path, source: str, data: dict) -> list[dict]:
