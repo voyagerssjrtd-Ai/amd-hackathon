@@ -68,6 +68,31 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_execution_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                case_id INTEGER NOT NULL,
+                agent_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                summary TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(case_id) REFERENCES kyc_cases(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_evidence (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                case_id INTEGER NOT NULL,
+                agent_name TEXT NOT NULL,
+                evidence_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(case_id) REFERENCES kyc_cases(id)
+            )
+            """
+        )
 
 
 def save_case(state: dict[str, Any]) -> int:
@@ -103,7 +128,41 @@ def save_case(state: dict[str, Any]) -> int:
                 utc_now(),
             ),
         )
-        return int(cur.lastrowid)
+        case_id = int(cur.lastrowid)
+        save_agent_logs(conn, case_id, state)
+        save_agent_evidence(conn, case_id, state)
+        return case_id
+
+
+def save_agent_logs(conn: sqlite3.Connection, case_id: int, state: dict[str, Any]) -> None:
+    for item in state.get("timeline", []):
+        conn.execute(
+            """
+            INSERT INTO agent_execution_logs (case_id, agent_name, status, summary, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (case_id, item.get("agent", ""), item.get("status", ""), item.get("summary", ""), utc_now()),
+        )
+
+
+def save_agent_evidence(conn: sqlite3.Connection, case_id: int, state: dict[str, Any]) -> None:
+    evidence_map = {
+        "Document Agent": {"pan_data": state.get("pan_data", {}), "aadhaar_data": state.get("aadhaar_data", {})},
+        "Entity Resolution Agent": state.get("entity_result", {}),
+        "Identity Agent": state.get("identity_result", {}),
+        "Compliance Agent": state.get("compliance_result", {}),
+        "Financial Agent": state.get("financial_result", {}),
+        "Risk Agent": state.get("risk_result", {}),
+        "Decision Agent": state.get("decision_result", {}),
+    }
+    for agent_name, evidence in evidence_map.items():
+        conn.execute(
+            """
+            INSERT INTO agent_evidence (case_id, agent_name, evidence_json, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (case_id, agent_name, json.dumps(evidence, ensure_ascii=False), utc_now()),
+        )
 
 
 def save_reviewer_decision(case_id: int, decision: str, notes: str = "") -> None:

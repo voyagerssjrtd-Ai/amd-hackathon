@@ -20,12 +20,44 @@ Complete 5-day hackathon MVP for agentic customer due diligence using Streamlit,
 The platform uses an LLM-first agent design:
 
 - Document Agent asks the multimodal LLM to extract each document separately.
+- Entity Resolution Agent builds the canonical customer entity from document evidence.
 - Identity Agent asks the LLM to compare PAN evidence against Aadhaar evidence.
 - Compliance Agent uses deterministic CSV screening for evidence, then asks the LLM to interpret the findings.
+- Financial Agent analyzes an optional bank statement or payslip.
 - Risk Agent asks the LLM for an explainable risk score.
 - Decision Agent asks the LLM for the final recommendation.
 
 Deterministic guardrails are still applied after LLM outputs for demo safety. For example, missing PAN number can never be approved, blacklist hits always escalate, and watchlist hits always require review.
+
+## Enterprise-Style Agentic Architecture
+
+```text
+Streamlit UI
+  -> LangGraph Orchestrator
+  -> Specialized Agents
+  -> MCP-style Tool Layer
+  -> SQLite Evidence Store
+```
+
+Agents:
+
+- Document Agent
+- Entity Resolution Agent
+- Identity Agent
+- Compliance Agent
+- Financial Agent
+- Risk Agent
+- Decision Agent
+- Audit Agent
+
+MCP-style local tools:
+
+- `identity.validate_pan`
+- `identity.compare_identity_evidence`
+- `screening.search_watchlists`
+- `financial.analyze_document`
+
+Every run stores agent timeline rows in `agent_execution_logs` and structured evidence in `agent_evidence`.
 
 ## Project Structure
 
@@ -220,8 +252,10 @@ To test review and escalation paths, add names, PAN numbers, or masked Aadhaar v
 ```text
 Customer Upload
   -> Document Agent
+  -> Entity Resolution Agent
   -> Identity Agent
   -> Compliance Agent
+  -> Financial Agent
   -> Risk Agent
   -> Decision Agent
   -> Audit Agent
@@ -233,3 +267,5 @@ The workflow is implemented with `langgraph.graph.StateGraph` in `app.py`.
 
 - `kyc_cases`: extracted data, agent outputs, final recommendation, report path
 - `reviewer_decisions`: human override decisions and notes
+- `agent_execution_logs`: auditable timeline of each agent action
+- `agent_evidence`: structured evidence emitted by every agent

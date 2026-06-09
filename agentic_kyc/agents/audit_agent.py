@@ -42,8 +42,10 @@ def build_report(path: Path, state: dict) -> None:
 
     extracted = state.get("extracted_data", {})
     add_table(story, [["Field", "Value"], *[[key, mask_if_sensitive(key, value)] for key, value in extracted.items()]])
+    add_section(story, "Entity Resolution", state.get("entity_result", {}))
     add_section(story, "Identity Verification", state.get("identity_result", {}))
     add_section(story, "Compliance Screening", state.get("compliance_result", {}))
+    add_section(story, "Financial Profiling", state.get("financial_result", {}))
     add_section(story, "Risk Scoring", state.get("risk_result", {}))
     add_section(story, "Final Decision", state.get("decision_result", {}))
     story.append(Paragraph("Agent Execution Timeline", styles["Heading2"]))

@@ -81,10 +81,12 @@ def calculate_risk(
     compliance_result: dict,
     pan_data: dict | None = None,
     aadhaar_data: dict | None = None,
+    financial_result: dict | None = None,
 ) -> dict:
     score = 10
     pan_data = pan_data or {}
     aadhaar_data = aadhaar_data or {}
+    financial_result = financial_result or {}
     reasons = ["PAN extracted successfully" if extracted_data.get("pan_number") else "PAN number missing"]
     reasons.append(
         "Aadhaar extracted successfully" if extracted_data.get("aadhaar_number") else "Aadhaar number missing"
@@ -94,17 +96,10 @@ def calculate_risk(
     if missing:
         score += len(missing) * 12
         reasons.append(f"Missing fields detected: {', '.join(missing)}")
-    
-    # Check if PAN was successfully extracted to merged data
-    has_pan = bool(extracted_data.get("pan_number"))
-    has_pan_name = bool(pan_data.get("name"))
-    
-    if not has_pan:
-        score = max(score, 55)
+    if not extracted_data.get("pan_number"):
+        score = max(score, 75)
         reasons.append("PAN number is mandatory for approval; case requires reviewer attention")
-    
-    # Only flag extraction failure if BOTH: no PAN in merged data AND no name in pan_data
-    if not has_pan and not has_pan_name:
+    if not pan_data.get("name") and not extracted_data.get("pan_number"):
         score = max(score, 70)
         reasons.append("PAN document extraction did not provide enough core identity evidence")
 
@@ -127,6 +122,12 @@ def calculate_risk(
         reasons.append("Blacklist hit detected")
     if not findings:
         reasons.append("No watchlist or blacklist match found")
+    if financial_result.get("financial_risk") == "LOW":
+        score -= 8
+        reasons.append("Stable financial profile reduced risk")
+    elif financial_result.get("financial_risk") == "HIGH":
+        score += 15
+        reasons.append("High financial risk increased risk")
 
     score = max(0, min(100, score))
     if score >= 75:

@@ -31,18 +31,12 @@ def run_document_agent(state: dict) -> dict:
 
 
 def merge_document_data(pan_data: dict, aadhaar_data: dict) -> dict:
-    # Ensure PAN data is properly extracted and not lost
-    pan_number = (pan_data.get("pan_number") or "").strip()
-    aadhaar_number = (aadhaar_data.get("aadhaar_number") or "").strip()
-    name = (pan_data.get("name") or aadhaar_data.get("name", "")).strip()
-    dob = (pan_data.get("dob") or aadhaar_data.get("dob", "")).strip()
-    
     return {
-        "name": name,
-        "dob": dob,
-        "pan_number": pan_number,
-        "aadhaar_number": aadhaar_number,
-        "address": (aadhaar_data.get("address") or "").strip(),
+        "name": pan_data.get("name") or aadhaar_data.get("name", ""),
+        "dob": pan_data.get("dob") or aadhaar_data.get("dob", ""),
+        "pan_number": pan_data.get("pan_number", ""),
+        "aadhaar_number": aadhaar_data.get("aadhaar_number", ""),
+        "address": aadhaar_data.get("address", ""),
         "pan_extraction_confidence": pan_data.get("extraction_confidence", 0),
         "aadhaar_extraction_confidence": aadhaar_data.get("extraction_confidence", 0),
     }

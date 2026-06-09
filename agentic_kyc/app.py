@@ -19,6 +19,8 @@ from agents.audit_agent import run_audit_agent
 from agents.compliance_agent import run_compliance_agent
 from agents.decision_agent import run_decision_agent
 from agents.document_agent import run_document_agent
+from agents.entity_agent import run_entity_agent
+from agents.financial_agent import run_financial_agent
 from agents.identity_agent import run_identity_agent
 from agents.risk_agent import run_risk_agent
 from database.models import init_db, list_cases, save_case, save_reviewer_decision
@@ -32,13 +34,16 @@ SAMPLES_DIR = ROOT_DIR / "data" / "sample_documents"
 class KYCState(TypedDict, total=False):
     pan_path: str
     aadhaar_path: str
+    financial_path: str
     pan_text: str
     aadhaar_text: str
     pan_data: dict[str, Any]
     aadhaar_data: dict[str, Any]
     extracted_data: dict[str, str]
+    entity_result: dict[str, Any]
     identity_result: dict[str, Any]
     compliance_result: dict[str, Any]
+    financial_result: dict[str, Any]
     risk_result: dict[str, Any]
     decision_result: dict[str, Any]
     report_path: str
@@ -49,15 +54,19 @@ class KYCState(TypedDict, total=False):
 def build_workflow():
     workflow = StateGraph(KYCState)
     workflow.add_node("document_agent", run_document_agent)
+    workflow.add_node("entity_agent", run_entity_agent)
     workflow.add_node("identity_agent", run_identity_agent)
     workflow.add_node("compliance_agent", run_compliance_agent)
+    workflow.add_node("financial_agent", run_financial_agent)
     workflow.add_node("risk_agent", run_risk_agent)
     workflow.add_node("decision_agent", run_decision_agent)
     workflow.add_node("audit_agent", run_audit_agent)
     workflow.set_entry_point("document_agent")
-    workflow.add_edge("document_agent", "identity_agent")
+    workflow.add_edge("document_agent", "entity_agent")
+    workflow.add_edge("entity_agent", "identity_agent")
     workflow.add_edge("identity_agent", "compliance_agent")
-    workflow.add_edge("compliance_agent", "risk_agent")
+    workflow.add_edge("compliance_agent", "financial_agent")
+    workflow.add_edge("financial_agent", "risk_agent")
     workflow.add_edge("risk_agent", "decision_agent")
     workflow.add_edge("decision_agent", "audit_agent")
     workflow.add_edge("audit_agent", END)
@@ -70,10 +79,6 @@ def main() -> None:
     ensure_sample_pdfs()
     st.set_page_config(page_title="Agentic KYC Intelligence", page_icon="KYC", layout="wide")
     render_styles()
-    
-    # Initialize session state early to prevent file upload issues
-    if "kyc_state" not in st.session_state:
-        st.session_state["kyc_state"] = None
 
     st.title("Agentic KYC Intelligence Platform")
     st.caption("Multi-agent customer due diligence with simulated identity, compliance, risk, and audit workflows.")
@@ -90,11 +95,11 @@ def main() -> None:
 def render_onboarding() -> None:
     st.subheader("Customer Onboarding")
     supported_types = ["pdf", "png", "jpg", "jpeg", "webp"]
-    
-    st.info("📄 Upload PAN and Aadhaar documents (PDF or image), or use bundled samples")
-    
     pan_file = st.file_uploader("Upload PAN document", type=supported_types, key="pan_pdf")
     aadhaar_file = st.file_uploader("Upload Aadhaar document", type=supported_types, key="aadhaar_pdf")
+    financial_file = st.file_uploader(
+        "Optional: upload bank statement or payslip", type=supported_types, key="financial_doc"
+    )
 
     sample_pan = SAMPLES_DIR / "sample_pan.pdf"
     sample_aadhaar = SAMPLES_DIR / "sample_aadhaar.pdf"
@@ -112,26 +117,29 @@ def render_onboarding() -> None:
 
     if st.button("Run KYC Analysis", type="primary", use_container_width=True):
         with st.spinner("Agents are collaborating on the KYC case..."):
-            try:
-                if use_sample:
-                    pan_path, aadhaar_path = sample_pan, sample_aadhaar
-                else:
-                    if not pan_file or not aadhaar_file:
-                        st.error("Upload both PAN and Aadhaar PDF files, or enable bundled sample documents.")
-                        return
-                    pan_path = save_upload(pan_file, "pan")
-                    aadhaar_path = save_upload(aadhaar_file, "aadhaar")
+            if use_sample:
+                pan_path, aadhaar_path = sample_pan, sample_aadhaar
+            else:
+                if not pan_file or not aadhaar_file:
+                    st.error("Upload both PAN and Aadhaar PDF files, or enable bundled sample documents.")
+                    return
+                pan_path = save_upload(pan_file, "pan")
+                aadhaar_path = save_upload(aadhaar_file, "aadhaar")
+            financial_path = save_upload(financial_file, "financial") if financial_file else ""
 
-                graph = build_workflow()
-                state = graph.invoke({"pan_path": str(pan_path), "aadhaar_path": str(aadhaar_path), "timeline": []})
-                case_id = save_case(state)
-                state["case_id"] = case_id
-                st.session_state["kyc_state"] = state
-                st.success(f"KYC analysis complete. Case #{case_id} created.")
-            except Exception as e:
-                st.error(f"Error during KYC analysis: {str(e)}")
-                import traceback
-                st.error(traceback.format_exc())
+            graph = build_workflow()
+            state = graph.invoke(
+                {
+                    "pan_path": str(pan_path),
+                    "aadhaar_path": str(aadhaar_path),
+                    "financial_path": str(financial_path),
+                    "timeline": [],
+                }
+            )
+            case_id = save_case(state)
+            state["case_id"] = case_id
+            st.session_state["kyc_state"] = state
+            st.success(f"KYC analysis complete. Case #{case_id} created.")
 
 
 def render_results() -> None:
@@ -145,14 +153,16 @@ def render_results() -> None:
     extracted = state.get("extracted_data", {})
     identity = state.get("identity_result", {})
     compliance = state.get("compliance_result", {})
+    financial = state.get("financial_result", {})
     risk = state.get("risk_result", {})
     decision = state.get("decision_result", {})
 
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Identity Match", f"{identity.get('identity_match_score', 0)}")
     m2.metric("Compliance", compliance.get("status", "UNKNOWN"))
-    m3.metric("Risk Score", f"{risk.get('risk_score', 0)}", risk.get("risk_level", ""))
-    m4.metric("Decision", decision.get("recommendation", "PENDING"))
+    m3.metric("Financial", financial.get("financial_risk", "UNKNOWN"))
+    m4.metric("Risk Score", f"{risk.get('risk_score', 0)}", risk.get("risk_level", ""))
+    m5.metric("Decision", decision.get("recommendation", "PENDING"))
 
     st.markdown("#### Customer Information")
     st.dataframe(
@@ -181,6 +191,21 @@ def render_results() -> None:
 
     c1, c2 = st.columns(2)
     with c1:
+        st.markdown("#### Explainable Risk Factors")
+        factors = risk.get("factors", [])
+        if factors:
+            st.dataframe(
+                [
+                    {
+                        "Factor": item.get("factor"),
+                        "Impact": f"{int(item.get('impact', 0)):+}",
+                        "Evidence": str(item.get("evidence", ""))[:180],
+                    }
+                    for item in factors
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
         st.markdown("#### Reasons")
         for reason in risk.get("reasons", []):
             st.write(f"- {reason}")
@@ -193,6 +218,10 @@ def render_results() -> None:
             st.dataframe(findings, hide_index=True, use_container_width=True)
         else:
             st.success("No simulated watchlist or blacklist matches.")
+        with st.expander("Compliance tool evidence"):
+            st.json(compliance.get("tool_evidence", {}))
+        st.markdown("#### Financial Profile")
+        st.json(financial)
 
     render_timeline(state.get("timeline", []))
     render_human_review(state)
@@ -217,7 +246,7 @@ def render_timeline(timeline: list[dict[str, str]]) -> None:
 
 
 def render_empty_timeline() -> None:
-    steps = ["Document", "Identity", "Compliance", "Risk", "Decision", "Audit"]
+    steps = ["Document", "Entity", "Identity", "Compliance", "Financial", "Risk", "Decision", "Audit"]
     cols = st.columns(len(steps))
     for col, step in zip(cols, steps):
         with col:
