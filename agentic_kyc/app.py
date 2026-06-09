@@ -70,6 +70,10 @@ def main() -> None:
     ensure_sample_pdfs()
     st.set_page_config(page_title="Agentic KYC Intelligence", page_icon="KYC", layout="wide")
     render_styles()
+    
+    # Initialize session state early to prevent file upload issues
+    if "kyc_state" not in st.session_state:
+        st.session_state["kyc_state"] = None
 
     st.title("Agentic KYC Intelligence Platform")
     st.caption("Multi-agent customer due diligence with simulated identity, compliance, risk, and audit workflows.")
@@ -86,6 +90,9 @@ def main() -> None:
 def render_onboarding() -> None:
     st.subheader("Customer Onboarding")
     supported_types = ["pdf", "png", "jpg", "jpeg", "webp"]
+    
+    st.info("📄 Upload PAN and Aadhaar documents (PDF or image), or use bundled samples")
+    
     pan_file = st.file_uploader("Upload PAN document", type=supported_types, key="pan_pdf")
     aadhaar_file = st.file_uploader("Upload Aadhaar document", type=supported_types, key="aadhaar_pdf")
 
@@ -105,21 +112,26 @@ def render_onboarding() -> None:
 
     if st.button("Run KYC Analysis", type="primary", use_container_width=True):
         with st.spinner("Agents are collaborating on the KYC case..."):
-            if use_sample:
-                pan_path, aadhaar_path = sample_pan, sample_aadhaar
-            else:
-                if not pan_file or not aadhaar_file:
-                    st.error("Upload both PAN and Aadhaar PDF files, or enable bundled sample documents.")
-                    return
-                pan_path = save_upload(pan_file, "pan")
-                aadhaar_path = save_upload(aadhaar_file, "aadhaar")
+            try:
+                if use_sample:
+                    pan_path, aadhaar_path = sample_pan, sample_aadhaar
+                else:
+                    if not pan_file or not aadhaar_file:
+                        st.error("Upload both PAN and Aadhaar PDF files, or enable bundled sample documents.")
+                        return
+                    pan_path = save_upload(pan_file, "pan")
+                    aadhaar_path = save_upload(aadhaar_file, "aadhaar")
 
-            graph = build_workflow()
-            state = graph.invoke({"pan_path": str(pan_path), "aadhaar_path": str(aadhaar_path), "timeline": []})
-            case_id = save_case(state)
-            state["case_id"] = case_id
-            st.session_state["kyc_state"] = state
-            st.success(f"KYC analysis complete. Case #{case_id} created.")
+                graph = build_workflow()
+                state = graph.invoke({"pan_path": str(pan_path), "aadhaar_path": str(aadhaar_path), "timeline": []})
+                case_id = save_case(state)
+                state["case_id"] = case_id
+                st.session_state["kyc_state"] = state
+                st.success(f"KYC analysis complete. Case #{case_id} created.")
+            except Exception as e:
+                st.error(f"Error during KYC analysis: {str(e)}")
+                import traceback
+                st.error(traceback.format_exc())
 
 
 def render_results() -> None:
