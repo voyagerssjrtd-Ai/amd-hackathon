@@ -173,12 +173,12 @@ SCREENING_PAYLOAD:
                 max_tokens=900,
             )
             parsed = parse_json_object(response.choices[0].message.content or "{}")
-            status = str(parsed.get("status", "REVIEW")).upper()
+            # Use the candidate findings from the deterministic screening as the source of truth
+            candidate_findings = payload.get("candidate_findings", [])
+            status = "REVIEW" if candidate_findings else "CLEAR"
             return {
-                "status": "CLEAR" if status == "CLEAR" and not payload.get("candidate_findings") else "REVIEW"
-                if payload.get("candidate_findings")
-                else "CLEAR",
-                "findings": parsed.get("findings", payload.get("candidate_findings", [])),
+                "status": status,
+                "findings": candidate_findings,
             }
         except Exception:
             raise
