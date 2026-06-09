@@ -232,11 +232,22 @@ Terminal 3 - create external link:
 
 1. Start vLLM, Streamlit, and Cloudflare Tunnel.
 2. Open the `trycloudflare.com` URL.
-3. Keep `Use bundled sample documents` enabled, or upload PAN and Aadhaar PDFs/images.
-4. Click `Run KYC Analysis`.
-5. Review customer data, identity score, compliance findings, risk score, decision, and timeline.
-6. Use the manual override section to store a reviewer decision.
-7. Download the generated audit PDF.
+3. Keep `Use bundled sample documents` enabled, or upload all KYC files through the single multi-file uploader.
+4. The Document Agent classifies each file as PAN, Aadhaar, financial, or unknown using extracted text and file-name fallback.
+5. Click `Run KYC Analysis`.
+6. Review customer data, OCR/VL previews, identity score, compliance findings, risk score, decision, and timeline.
+7. Use the manual override section to store a reviewer decision.
+8. Download the generated audit PDF.
+
+## OCR And Image Handling
+
+The extraction pipeline handles:
+
+- text PDFs through `pdfplumber` and `pypdf`
+- scanned PDFs by rendering pages with PyMuPDF
+- direct image uploads through the multimodal OpenAI-compatible vLLM call
+
+The Streamlit dashboard shows document classification and text previews so reviewers can validate whether OCR/VL capture worked for each file.
 
 ## Simulated Compliance
 

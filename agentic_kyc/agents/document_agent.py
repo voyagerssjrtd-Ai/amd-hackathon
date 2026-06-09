@@ -1,15 +1,32 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 from services.llm_service import LLMService
 from services.pdf_service import extract_text_from_pdf
 
 
 def run_document_agent(state: dict) -> dict:
-    pan_text = extract_text_from_pdf(state["pan_path"])
-    aadhaar_text = extract_text_from_pdf(state["aadhaar_path"])
+    document_paths = state.get("document_paths") or []
+    if document_paths:
+        classified = classify_uploaded_documents(document_paths)
+        pan_path = classified.get("pan_path", "")
+        aadhaar_path = classified.get("aadhaar_path", "")
+        financial_path = classified.get("financial_path", state.get("financial_path", ""))
+    else:
+        classified = {}
+        pan_path = state.get("pan_path", "")
+        aadhaar_path = state.get("aadhaar_path", "")
+        financial_path = state.get("financial_path", "")
+
+    pan_text = extract_text_from_pdf(pan_path) if pan_path else ""
+    aadhaar_text = extract_text_from_pdf(aadhaar_path) if aadhaar_path else ""
     llm = LLMService()
     pan_data = llm.extract_document_json("PAN", pan_text)
     aadhaar_data = llm.extract_document_json("AADHAAR", aadhaar_text)
+    pan_data = normalize_extraction_confidence(pan_data)
+    aadhaar_data = normalize_extraction_confidence(aadhaar_data)
     extracted = merge_document_data(pan_data, aadhaar_data)
     timeline = state.get("timeline", [])
     timeline.append(
@@ -21,10 +38,18 @@ def run_document_agent(state: dict) -> dict:
     )
     return {
         **state,
+        "pan_path": str(pan_path),
+        "aadhaar_path": str(aadhaar_path),
+        "financial_path": str(financial_path),
         "pan_text": pan_text,
         "aadhaar_text": aadhaar_text,
         "pan_data": pan_data,
         "aadhaar_data": aadhaar_data,
+        "document_classification": classified,
+        "document_texts": {
+            "pan": preview_text(pan_text),
+            "aadhaar": preview_text(aadhaar_text),
+        },
         "extracted_data": extracted,
         "timeline": timeline,
     }
@@ -40,3 +65,55 @@ def merge_document_data(pan_data: dict, aadhaar_data: dict) -> dict:
         "pan_extraction_confidence": pan_data.get("extraction_confidence", 0),
         "aadhaar_extraction_confidence": aadhaar_data.get("extraction_confidence", 0),
     }
+
+
+def classify_uploaded_documents(document_paths: list[str]) -> dict:
+    classified: dict[str, str | list[dict]] = {"documents": []}
+    for raw_path in document_paths:
+        path = str(raw_path)
+        text = extract_text_from_pdf(path)
+        kind = infer_document_type(path, text)
+        classified["documents"].append(
+            {"path": path, "filename": Path(path).name, "type": kind, "text_preview": preview_text(text)}
+        )
+        if kind == "PAN" and not classified.get("pan_path"):
+            classified["pan_path"] = path
+        elif kind == "AADHAAR" and not classified.get("aadhaar_path"):
+            classified["aadhaar_path"] = path
+        elif kind == "FINANCIAL" and not classified.get("financial_path"):
+            classified["financial_path"] = path
+
+    # Filename fallback when OCR/VL text is partial.
+    for item in classified["documents"]:
+        filename = item["filename"].lower()
+        if "pan" in filename and not classified.get("pan_path"):
+            classified["pan_path"] = item["path"]
+            item["type"] = "PAN"
+        if ("aadhaar" in filename or "aadhar" in filename) and not classified.get("aadhaar_path"):
+            classified["aadhaar_path"] = item["path"]
+            item["type"] = "AADHAAR"
+        if any(key in filename for key in ["bank", "salary", "payslip", "statement"]) and not classified.get("financial_path"):
+            classified["financial_path"] = item["path"]
+            item["type"] = "FINANCIAL"
+    return classified
+
+
+def infer_document_type(path: str, text: str) -> str:
+    haystack = f"{Path(path).name}\n{text}".lower()
+    if re.search(r"\b[a-z]{5}[0-9]{4}[a-z]\b", haystack) or "permanent account number" in haystack:
+        return "PAN"
+    if "aadhaar" in haystack or re.search(r"\b[0-9]{4}\s?[0-9]{4}\s?[0-9]{4}\b", haystack):
+        return "AADHAAR"
+    if re.search(r"bank statement|salary|payslip|credited|debit|credit|balance|emi|loan", haystack):
+        return "FINANCIAL"
+    return "UNKNOWN"
+
+
+def normalize_extraction_confidence(data: dict) -> dict:
+    present = sum(1 for key in ["name", "dob", "pan_number", "aadhaar_number", "address"] if data.get(key))
+    data["extraction_confidence"] = max(int(data.get("extraction_confidence") or 0), min(100, present * 25))
+    return data
+
+
+def preview_text(text: str, limit: int = 1200) -> str:
+    return re.sub(r"\s+", " ", text).strip()[:limit]

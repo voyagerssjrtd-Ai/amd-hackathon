@@ -97,9 +97,32 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
     else:
         factors.append({"factor": "Financial document not provided", "impact": 0, "evidence": "Optional for this MVP"})
 
+    score = calculate_factor_score(factors, compliance)
+    result["risk_score"] = score
+    result["risk_level"] = "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW"
     result["factors"] = factors
-    result["reasons"] = dedupe(result.get("reasons", []) + [f"{item['factor']} ({item['impact']:+})" for item in factors])
+    clean_reasons = remove_contradictory_reasons(result.get("reasons", []), bool(extracted.get("pan_number")))
+    result["reasons"] = dedupe(clean_reasons + [f"{item['factor']} ({item['impact']:+})" for item in factors])
     return result
+
+
+def calculate_factor_score(factors: list[dict], compliance: dict) -> int:
+    score = 50 + sum(int(item.get("impact", 0)) for item in factors)
+    findings = compliance.get("findings", [])
+    if any(item.get("source") == "blacklist" for item in findings):
+        score = max(score, 90)
+    elif any(item.get("source") == "watchlist" for item in findings):
+        score = max(score, 65)
+    if any(item.get("factor") == "PAN missing" for item in factors):
+        score = max(score, 75)
+    return max(0, min(100, score))
+
+
+def remove_contradictory_reasons(reasons: list[str], pan_present: bool) -> list[str]:
+    if not pan_present:
+        return reasons
+    blocked_terms = ["pan number missing", "missing pan", "pan not found", "pan extraction is incomplete"]
+    return [reason for reason in reasons if not any(term in reason.lower() for term in blocked_terms)]
 
 
 def dedupe(items: list[str]) -> list[str]:

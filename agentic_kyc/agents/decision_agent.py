@@ -75,16 +75,25 @@ def enforce_decision_gates(result: dict, payload: dict) -> dict:
     findings = payload.get("compliance_result", {}).get("findings", [])
     risk = payload.get("risk_result", {})
 
+    risk_score = int(risk.get("risk_score", 100))
+    pan_present = bool(extracted.get("pan_number"))
+    pan_name_present = bool(pan_data.get("name"))
+
     if any(item.get("source") == "blacklist" for item in findings):
         result["recommendation"] = "ESCALATE"
         result["explanation"] = "Blacklist evidence requires compliance escalation."
-    elif not extracted.get("pan_number") or not pan_data.get("name"):
+    elif not pan_present or not pan_name_present:
         result["recommendation"] = "REVIEW"
         result["explanation"] = "PAN extraction is incomplete; a human reviewer must validate the PAN document."
-    elif int(risk.get("risk_score", 100)) >= 80:
+    elif risk_score >= 80:
         result["recommendation"] = "ESCALATE"
-    elif int(risk.get("risk_score", 100)) >= 40:
+        result["explanation"] = "High explainable risk score requires compliance escalation."
+    elif risk_score >= 40:
         result["recommendation"] = "REVIEW"
+        result["explanation"] = explain_review(payload)
+    else:
+        result["recommendation"] = "APPROVE"
+        result["explanation"] = "PAN, Aadhaar, identity, and compliance evidence support approval."
 
     evidence = result.get("evidence", {})
     if not isinstance(evidence, dict):
@@ -92,10 +101,29 @@ def enforce_decision_gates(result: dict, payload: dict) -> dict:
     evidence.update(
         {
             "pan_number_present": bool(extracted.get("pan_number")),
-            "pan_name_present": bool(pan_data.get("name")),
+            "pan_name_present": pan_name_present,
             "risk_score": risk.get("risk_score"),
             "risk_level": risk.get("risk_level"),
         }
     )
     result["evidence"] = evidence
+    result["explanation"] = sanitize_explanation(result.get("explanation", ""), pan_present)
     return result
+
+
+def explain_review(payload: dict) -> str:
+    risk = payload.get("risk_result", {})
+    factors = risk.get("factors", [])
+    positive = [item["factor"] for item in factors if int(item.get("impact", 0)) > 0]
+    if positive:
+        return f"Reviewer attention required due to: {', '.join(positive)}."
+    return f"Reviewer attention required because risk score is {risk.get('risk_score')}."
+
+
+def sanitize_explanation(explanation: str, pan_present: bool) -> str:
+    if not pan_present:
+        return explanation
+    contradictory = ["missing pan", "pan number missing", "missing pan number", "pan extraction is incomplete"]
+    if any(term in explanation.lower() for term in contradictory):
+        return "PAN was extracted successfully; recommendation is based on the current explainable risk score and agent evidence."
+    return explanation

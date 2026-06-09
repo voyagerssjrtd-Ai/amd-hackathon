@@ -32,6 +32,7 @@ SAMPLES_DIR = ROOT_DIR / "data" / "sample_documents"
 
 
 class KYCState(TypedDict, total=False):
+    document_paths: list[str]
     pan_path: str
     aadhaar_path: str
     financial_path: str
@@ -46,6 +47,8 @@ class KYCState(TypedDict, total=False):
     financial_result: dict[str, Any]
     risk_result: dict[str, Any]
     decision_result: dict[str, Any]
+    document_classification: dict[str, Any]
+    document_texts: dict[str, str]
     report_path: str
     timeline: list[dict[str, str]]
 
@@ -95,15 +98,17 @@ def main() -> None:
 def render_onboarding() -> None:
     st.subheader("Customer Onboarding")
     supported_types = ["pdf", "png", "jpg", "jpeg", "webp"]
-    pan_file = st.file_uploader("Upload PAN document", type=supported_types, key="pan_pdf")
-    aadhaar_file = st.file_uploader("Upload Aadhaar document", type=supported_types, key="aadhaar_pdf")
-    financial_file = st.file_uploader(
-        "Optional: upload bank statement or payslip", type=supported_types, key="financial_doc"
+    uploaded_files = st.file_uploader(
+        "Upload KYC documents",
+        type=supported_types,
+        accept_multiple_files=True,
+        key="kyc_documents",
+        help="Upload PAN, Aadhaar, and optionally a bank statement or payslip. The Document Agent classifies them.",
     )
 
     sample_pan = SAMPLES_DIR / "sample_pan.pdf"
     sample_aadhaar = SAMPLES_DIR / "sample_aadhaar.pdf"
-    use_sample = st.toggle("Use bundled sample documents", value=not pan_file and not aadhaar_file)
+    use_sample = st.toggle("Use bundled sample documents", value=not uploaded_files)
 
     st.info(
         f"LLM endpoint: {os.getenv('BASE_URL', 'http://localhost:8000/v1')} | "
@@ -118,21 +123,17 @@ def render_onboarding() -> None:
     if st.button("Run KYC Analysis", type="primary", use_container_width=True):
         with st.spinner("Agents are collaborating on the KYC case..."):
             if use_sample:
-                pan_path, aadhaar_path = sample_pan, sample_aadhaar
+                document_paths = [str(sample_pan), str(sample_aadhaar)]
             else:
-                if not pan_file or not aadhaar_file:
-                    st.error("Upload both PAN and Aadhaar PDF files, or enable bundled sample documents.")
+                if not uploaded_files:
+                    st.error("Upload PAN and Aadhaar documents, or enable bundled sample documents.")
                     return
-                pan_path = save_upload(pan_file, "pan")
-                aadhaar_path = save_upload(aadhaar_file, "aadhaar")
-            financial_path = save_upload(financial_file, "financial") if financial_file else ""
+                document_paths = [str(path) for path in save_uploads(uploaded_files)]
 
             graph = build_workflow()
             state = graph.invoke(
                 {
-                    "pan_path": str(pan_path),
-                    "aadhaar_path": str(aadhaar_path),
-                    "financial_path": str(financial_path),
+                    "document_paths": document_paths,
                     "timeline": [],
                 }
             )
@@ -178,6 +179,8 @@ def render_results() -> None:
     )
 
     st.markdown("#### Document Extraction Evidence")
+    with st.expander("Document classification and OCR/VL previews", expanded=True):
+        st.json(state.get("document_classification", {}))
     e1, e2 = st.columns(2)
     with e1:
         st.write("PAN extraction")
@@ -311,6 +314,10 @@ def save_upload(uploaded_file, prefix: str) -> Path:
     return path
 
 
+def save_uploads(uploaded_files) -> list[Path]:
+    return [save_upload(uploaded_file, f"doc_{index}") for index, uploaded_file in enumerate(uploaded_files, start=1)]
+
+
 def ensure_directories() -> None:
     for path in [UPLOADS_DIR, ROOT_DIR / "reports", SAMPLES_DIR]:
         path.mkdir(parents=True, exist_ok=True)
@@ -380,6 +387,12 @@ def render_styles() -> None:
             margin-top: 6px;
             color: #4b5f73;
             line-height: 1.35;
+        }
+        .timeline-step strong {
+            color: #102033;
+        }
+        .timeline-step {
+            color: #102033;
         }
         </style>
         """,

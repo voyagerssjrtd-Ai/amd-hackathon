@@ -20,6 +20,17 @@ def analyze_financial_document(path: str | None) -> dict:
         }
 
     text = extract_text_from_document(Path(path))
+    if not re.search(r"bank statement|salary|payslip|credited|debit|credit|balance|emi|loan|account statement", text, re.I):
+        return {
+            "tool": "financial.analyze_document",
+            "status": "NOT_FINANCIAL",
+            "monthly_income": None,
+            "average_balance": None,
+            "debt_ratio": None,
+            "employment_stability": "UNKNOWN",
+            "financial_risk": "UNKNOWN",
+            "evidence": ["Uploaded file did not contain bank statement or payslip indicators."],
+        }
     amounts = [float(item.replace(",", "")) for item in re.findall(r"(?:INR|Rs\.?|₹)?\s*([0-9][0-9,]{3,}(?:\.\d+)?)", text)]
     income_candidates = [amount for amount in amounts if amount >= 10000]
     monthly_income = max(income_candidates) if income_candidates else None
