@@ -40,12 +40,20 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
     reasons = result.get("reasons", [])
     score = int(result.get("risk_score", 100))
 
-    if not extracted.get("pan_number"):
+    # Check if PAN was successfully extracted to merged extracted_data
+    has_pan = bool(extracted.get("pan_number"))
+    has_pan_name = bool(pan_data.get("name"))
+    has_pan_dob = bool(pan_data.get("dob"))
+    
+    if not has_pan:
         score = max(score, 55)
         reasons.append("PAN number missing; approval is blocked pending reviewer validation")
-    if not pan_data.get("name") and not extracted.get("pan_number"):
+    
+    # Only flag extraction failure if BOTH: no PAN extracted AND no name or DOB in PAN document
+    if not has_pan and (not has_pan_name or not has_pan_dob):
         score = max(score, 70)
         reasons.append("PAN document image/text was not reliably extracted")
+    
     if any(item.get("source") == "watchlist" for item in findings):
         score = max(score, 65)
     if any(item.get("source") == "blacklist" for item in findings):

@@ -15,6 +15,72 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from agents.compliance_agent import exact_score, mask_aadhaar, normalize_pan, screen_file
+from agents.document_agent import merge_document_data
+
+
+def test_merge_document_data():
+    """Test document merge function preserves PAN data."""
+    print("\n" + "=" * 60)
+    print("TEST: Document merge function preserves PAN data")
+    print("=" * 60)
+    
+    pan_data = {
+        "name": "S P RANJITH",
+        "dob": "1999-08-16",
+        "pan_number": "DHRPR8630C",
+        "aadhaar_number": "",
+        "address": "",
+        "extraction_confidence": 0,
+        "evidence": ["Name: S P RANJITH", "PAN: DHRPR8630C"],
+    }
+    
+    aadhaar_data = {
+        "name": "Ranjith S P",
+        "dob": "1999-08-16",
+        "pan_number": "",
+        "aadhaar_number": "XXXX-XXXX-0061",
+        "address": "C/O Padmapriya S, 31FJ, WARD 4, CHELLANDIYAMMAN KOVIL STREET",
+        "extraction_confidence": 0,
+        "evidence": ["Name from top", "DOB below name", "Aadhaar number", "Address at bottom"],
+    }
+    
+    merged = merge_document_data(pan_data, aadhaar_data)
+    
+    print(f"Input PAN data: {pan_data['pan_number']}")
+    print(f"Input Aadhaar data: {aadhaar_data['aadhaar_number']}")
+    print(f"Merged PAN: {merged['pan_number']}")
+    print(f"Merged Aadhaar: {merged['aadhaar_number']}")
+    print(f"Merged Name: {merged['name']}")
+    print(f"Merged DOB: {merged['dob']}")
+    
+    tests_pass = 0
+    tests_total = 4
+    
+    if merged['pan_number'] == "DHRPR8630C":
+        print("✓ PAN number correctly merged from PAN data")
+        tests_pass += 1
+    else:
+        print(f"✗ PAN number merge failed: got '{merged['pan_number']}'")
+    
+    if merged['aadhaar_number'] == "XXXX-XXXX-0061":
+        print("✓ Aadhaar number correctly merged from Aadhaar data")
+        tests_pass += 1
+    else:
+        print(f"✗ Aadhaar merge failed: got '{merged['aadhaar_number']}'")
+    
+    if merged['name'] == "S P RANJITH":
+        print("✓ Name correctly prioritized from PAN data")
+        tests_pass += 1
+    else:
+        print(f"✗ Name merge failed: got '{merged['name']}'")
+    
+    if merged['dob'] == "1999-08-16":
+        print("✓ DOB correctly merged")
+        tests_pass += 1
+    else:
+        print(f"✗ DOB merge failed: got '{merged['dob']}'")
+    
+    print(f"\nMerge tests: {tests_pass}/{tests_total} pass")
 
 
 def test_exact_score():
@@ -150,6 +216,7 @@ def main():
     
     test_exact_score()
     test_mask_aadhaar()
+    test_merge_document_data()
     test_compliance_screening()
     test_pan_extraction()
     

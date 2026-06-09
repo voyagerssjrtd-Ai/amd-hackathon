@@ -94,10 +94,17 @@ def calculate_risk(
     if missing:
         score += len(missing) * 12
         reasons.append(f"Missing fields detected: {', '.join(missing)}")
-    if not extracted_data.get("pan_number"):
+    
+    # Check if PAN was successfully extracted to merged data
+    has_pan = bool(extracted_data.get("pan_number"))
+    has_pan_name = bool(pan_data.get("name"))
+    
+    if not has_pan:
         score = max(score, 55)
         reasons.append("PAN number is mandatory for approval; case requires reviewer attention")
-    if not pan_data.get("name") and not extracted_data.get("pan_number"):
+    
+    # Only flag extraction failure if BOTH: no PAN in merged data AND no name in pan_data
+    if not has_pan and not has_pan_name:
         score = max(score, 70)
         reasons.append("PAN document extraction did not provide enough core identity evidence")
 
