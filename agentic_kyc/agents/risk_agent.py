@@ -12,6 +12,7 @@ def run_risk_agent(state: dict) -> dict:
         "identity_result": state.get("identity_result", {}),
         "compliance_result": state.get("compliance_result", {}),
         "financial_result": state.get("financial_result", {}),
+        "document_evidence": state.get("document_evidence", []),
     }
     try:
         result = enforce_risk_gates(LLMService().score_risk(payload), payload)
@@ -40,6 +41,32 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
     extracted = payload.get("extracted_data", {})
     pan_data = payload.get("pan_data", {})
     findings = payload.get("compliance_result", {}).get("findings", [])
+    document_evidence = payload.get("document_evidence", [])
+
+    fraud_indicators = [
+        "not a valid id",
+        "sample only",
+        "test data",
+        "fake",
+        "tampered",
+        "demo document",
+        "specimen",
+        "training data",
+        "illustrative",
+    ]
+
+    for evidence in document_evidence:
+        text = str(evidence.get("evidence", "")).lower()
+
+        for indicator in fraud_indicators:
+            if indicator in text:
+                score = 95
+
+                reasons.append(
+                    f"Fraud indicator detected: '{indicator}'."
+                )
+
+                break
     reasons = result.get("reasons", [])
     score = int(result.get("risk_score", 100))
 
@@ -59,8 +86,14 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
         score = max(score, 65)
     if any(item.get("source") == "blacklist" for item in findings):
         score = max(score, 90)
-
-    level = "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW"
+        score = min(100, score)
+        level = (
+            "HIGH"
+            if score >= 75
+            else "MEDIUM"
+            if score >= 40
+            else "LOW"
+        )
     return {"risk_score": score, "risk_level": level, "reasons": dedupe(reasons)}
 
 
@@ -97,7 +130,17 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
     else:
         factors.append({"factor": "Financial document not provided", "impact": 0, "evidence": "Optional for this MVP"})
 
-    score = calculate_factor_score(factors, compliance)
+        factor_score = calculate_factor_score(
+        factors,
+        compliance,
+    )
+
+    score = max(
+        int(result.get("risk_score", 0)),
+        factor_score,
+    )
+
+    result["risk_score"] = score
     result["risk_score"] = score
     result["risk_level"] = "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW"
     result["factors"] = factors
