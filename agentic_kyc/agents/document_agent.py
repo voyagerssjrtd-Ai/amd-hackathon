@@ -25,6 +25,23 @@ def run_document_agent(state: dict) -> dict:
     llm = LLMService()
     pan_data = llm.extract_document_json("PAN", pan_text)
     aadhaar_data = llm.extract_document_json("AADHAAR", aadhaar_text)
+    pan_authenticity = (
+    llm.assess_document_authenticity(
+        "PAN",
+        pan_text,
+    )
+    if pan_text
+    else {}
+)
+
+    aadhaar_authenticity = (
+        llm.assess_document_authenticity(
+            "AADHAAR",
+            aadhaar_text,
+        )
+        if aadhaar_text
+        else {}
+    )
     pan_data = normalize_extraction_confidence(pan_data)
     aadhaar_data = normalize_extraction_confidence(aadhaar_data)
     extracted = merge_document_data(pan_data, aadhaar_data)
@@ -56,6 +73,10 @@ def run_document_agent(state: dict) -> dict:
         "document_confidence": document_confidence,
         "extracted_data": extracted,
         "timeline": timeline,
+        "document_integrity": {
+        "PAN": pan_authenticity,
+        "AADHAAR": aadhaar_authenticity,
+},
     }
 
 

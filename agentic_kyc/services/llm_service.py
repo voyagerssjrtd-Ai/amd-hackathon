@@ -72,7 +72,112 @@ DOCUMENT_TEXT:
             return normalize_document_json(parse_json_object(content))
         except Exception:
             return normalize_document_json(rule_based_extract_single(text))
+    def assess_document_authenticity(
+        self,
+        document_type: str,
+        document_text: str,
+    ) -> dict[str, Any]:
 
+        prompt = f"""
+    You are an expert KYC Document Fraud Detection Agent.
+
+    Your task is to determine whether the document appears suitable
+    for customer onboarding.
+
+    Document Type:
+    {document_type}
+
+    Extracted Document Text:
+    {document_text}
+
+    Analyze for:
+
+    - Explicit fraud markers.
+    - Sample/demo/training indicators.
+    - Contradictory information.
+    - Signs of manual modification.
+    - Missing mandatory fields.
+    - Suspicious annotations.
+
+    Return STRICT JSON only:
+
+    {{
+        "document_status":
+            "GENUINE|SUSPICIOUS|TAMPERED",
+
+        "authenticity_score":
+            0,
+
+        "fraud_signals": [],
+
+        "reasoning": []
+    }}
+
+    Scoring guidance:
+
+    90-100:
+        Genuine document.
+
+    60-89:
+        Minor concerns.
+
+    30-59:
+        Suspicious.
+
+    0-29:
+        Likely fraudulent or tampered.
+
+    Never ignore explicit warnings such as
+    "SAMPLE ONLY",
+    "TEST DATA",
+    "NOT A VALID ID".
+    """
+
+        try:
+
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content":
+                            "Return valid JSON only.",
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    },
+                ],
+                temperature=0,
+                max_tokens=700,
+            )
+
+            parsed = parse_json_object(
+                response.choices[0].message.content
+                or "{}"
+            )
+
+            return normalize_document_authenticity(
+                parsed
+            )
+
+        except Exception:
+
+            return {
+                "document_status":
+                    "UNKNOWN",
+
+                "authenticity_score":
+                    50,
+
+                "fraud_signals": [
+                    "Authenticity assessment failed."
+                ],
+
+                "reasoning": [
+                    "LLM assessment unavailable."
+                ],
+            }
     def verify_identity(self, pan_data: dict[str, Any], aadhaar_data: dict[str, Any]) -> dict[str, Any]:
         prompt = f"""
 You are an Identity Verification Agent. Compare PAN and Aadhaar extraction results.
@@ -280,7 +385,99 @@ def normalize_document_json(data: dict[str, Any]) -> dict[str, Any]:
     normalized["evidence"] = [str(item) for item in evidence if str(item).strip()]
     return normalized
 
+def normalize_document_authenticity(
+    data: dict[str, Any],
+) -> dict[str, Any]:
 
+    status = str(
+        data.get(
+            "document_status",
+            "UNKNOWN",
+        )
+    ).upper()
+
+    if status not in {
+        "GENUINE",
+        "SUSPICIOUS",
+        "TAMPERED",
+    }:
+
+        status = "UNKNOWN"
+
+    try:
+
+        score = int(
+            float(
+                data.get(
+                    "authenticity_score",
+                    50,
+                )
+            )
+        )
+
+    except Exception:
+
+        score = 50
+
+    score = max(
+        0,
+        min(100, score),
+    )
+
+    fraud_signals = data.get(
+        "fraud_signals",
+        [],
+    )
+
+    if isinstance(
+        fraud_signals,
+        str,
+    ):
+
+        fraud_signals = [
+            fraud_signals
+        ]
+
+    reasoning = data.get(
+        "reasoning",
+        [],
+    )
+
+    if isinstance(
+        reasoning,
+        str,
+    ):
+
+        reasoning = [
+            reasoning
+        ]
+
+    return {
+
+        "document_status":
+            status,
+
+        "authenticity_score":
+            score,
+
+        "fraud_signals": [
+
+            str(item)
+
+            for item in fraud_signals
+
+            if str(item).strip()
+        ],
+
+        "reasoning": [
+
+            str(item)
+
+            for item in reasoning
+
+            if str(item).strip()
+        ],
+    }
 def normalize_identity_json(data: dict[str, Any]) -> dict[str, Any]:
     try:
         score = int(float(data.get("identity_match_score", 0)))
