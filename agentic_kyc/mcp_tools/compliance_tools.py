@@ -25,9 +25,9 @@ def screen_watchlist(
     if not customer_name:
         return findings
 
-    file_path = knowledge_dir / "compliance_knowledge" / "watchlist.csv"
+    file_path = resolve_knowledge_file(knowledge_dir, "watchlist.csv")
 
-    if not file_path.exists():
+    if file_path is None:
         return findings
 
     with file_path.open(
@@ -82,9 +82,9 @@ def screen_blacklist(
     if not customer_name:
         return findings
 
-    file_path = knowledge_dir / "compliance_knowledge" / "blacklist.csv"
+    file_path = resolve_knowledge_file(knowledge_dir, "blacklist.csv")
 
-    if not file_path.exists():
+    if file_path is None:
         return findings
 
     with file_path.open(
@@ -139,9 +139,9 @@ def screen_pep(
     if not customer_name:
         return findings
 
-    file_path = knowledge_dir / "compliance_knowledge" / "pep.csv"
+    file_path = resolve_knowledge_file(knowledge_dir, "pep.csv")
 
-    if not file_path.exists():
+    if file_path is None:
         return findings
 
     with file_path.open(
@@ -207,10 +207,14 @@ def retrieve_compliance_context(
     # Auto-ingest on first run
     #
 
+    knowledge_path = knowledge_dir / "compliance_knowledge"
+    if not knowledge_path.exists():
+        knowledge_path = knowledge_dir
+
     if qdrant.count() == 0:
 
         qdrant.load_compliance_knowledge(
-            knowledge_dir / "compliance_knowledge",
+            knowledge_path,
         )
 
     #
@@ -227,6 +231,16 @@ def retrieve_compliance_context(
                 "",
             )
         )
+
+    for key in ["name", "dob", "pan_number", "address"]:
+        value = str(customer_data.get(key, "") or "").strip()
+        if value:
+            query_parts.append(f"{key}: {value}")
+
+    for key in ["pan_text", "aadhaar_text", "document_text"]:
+        value = str(customer_data.get(key, "") or "").strip()
+        if value:
+            query_parts.append(value[:1000])
 
         query_parts.append(
             finding.get(
@@ -320,6 +334,8 @@ def run_compliance_screening(
     )
 
     return {
+        "status": "REVIEW" if findings else "CLEAR",
+
         "findings": findings,
 
         "rag_context": rag_context,
@@ -328,5 +344,17 @@ def run_compliance_screening(
             "watchlist": watchlist,
             "blacklist": blacklist,
             "pep": pep,
+            "rag_context": rag_context,
         },
     }
+
+
+def resolve_knowledge_file(knowledge_dir: Path, filename: str) -> Path | None:
+    candidates = [
+        knowledge_dir / "compliance_knowledge" / filename,
+        knowledge_dir / filename,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None

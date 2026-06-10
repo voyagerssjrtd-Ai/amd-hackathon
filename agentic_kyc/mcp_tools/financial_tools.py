@@ -16,8 +16,8 @@ def extract_amount(patterns: list[str], text: str) -> float | None:
         if match:
             try:
                 return float(match.group(1).replace(",", ""))
-            except Exception:
-                pass
+            except (TypeError, ValueError):
+                continue
 
     return None
 
@@ -155,8 +155,8 @@ def analyze_financial_document(path: str | None) -> dict:
             balances.append(
                 float(value.replace(",", ""))
             )
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            continue
 
     average_balance = (
         round(sum(balances) / len(balances), 2)

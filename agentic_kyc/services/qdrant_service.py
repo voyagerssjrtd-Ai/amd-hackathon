@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import os
 import uuid
 from pathlib import Path
@@ -43,7 +44,11 @@ class QdrantService:
             raise RuntimeError("qdrant-client and sentence-transformers are required for compliance RAG")
         self.client = self.client or self._create_client()
         self.encoder = self.encoder or SentenceTransformer(self.embedding_model, device="cpu")
-        self.vector_size = self.vector_size or self.encoder.get_sentence_embedding_dimension()
+        if self.vector_size is None:
+            if hasattr(self.encoder, "get_embedding_dimension"):
+                self.vector_size = self.encoder.get_embedding_dimension()
+            else:
+                self.vector_size = self.encoder.get_sentence_embedding_dimension()
 
         collections = self.client.get_collections()
         existing = {collection.name for collection in collections.collections}
@@ -69,6 +74,25 @@ class QdrantService:
     def load_compliance_knowledge(self, knowledge_dir: str | Path) -> int:
         knowledge_dir = Path(knowledge_dir)
         documents: list[dict] = []
+
+        for csv_name, source in [
+            ("watchlist.csv", "WATCHLIST"),
+            ("blacklist.csv", "BLACKLIST"),
+            ("pep.csv", "PEP"),
+        ]:
+            path = knowledge_dir / csv_name
+            if path.exists():
+                with path.open(encoding="utf-8") as file:
+                    for row in csv.DictReader(file):
+                        content = " | ".join(f"{key}: {value}" for key, value in row.items() if value)
+                        if content:
+                            documents.append(
+                                {
+                                    "source": source,
+                                    "content": content,
+                                    "risk": row.get("risk") or row.get("severity") or "MEDIUM",
+                                }
+                            )
 
         fraud_file = knowledge_dir / "fraud_cases.csv"
         if fraud_file.exists():
@@ -108,7 +132,8 @@ class QdrantService:
                 "content": content,
                 "risk": document.get("risk", "UNKNOWN"),
             }
-            points.append(PointStruct(id=str(uuid.uuid4()), vector=embedding, payload=payload))
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, stable_document_key(payload)))
+            points.append(PointStruct(id=point_id, vector=embedding, payload=payload))
 
         if not points:
             return 0
@@ -147,3 +172,8 @@ class QdrantService:
     def initialize_if_needed(self) -> None:
         if self.client is None or self.encoder is None or self.vector_size is None:
             self.initialize()
+
+
+def stable_document_key(payload: dict) -> str:
+    raw = f"{payload.get('source', '')}|{payload.get('risk', '')}|{payload.get('content', '')}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()

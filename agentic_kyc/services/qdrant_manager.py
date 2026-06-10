@@ -20,6 +20,7 @@ def get_qdrant() -> QdrantService:
     global _qdrant_instance
     with _qdrant_lock:
         if _qdrant_instance is None:
-            _qdrant_instance = QdrantService()
-            _qdrant_instance.initialize()
+            instance = QdrantService()
+            instance.initialize()
+            _qdrant_instance = instance
         return _qdrant_instance

@@ -288,6 +288,15 @@ Embedded Qdrant allows only one active client for the same storage folder. If
 Streamlit reruns or multiple terminals collide, the app now falls back to an
 in-memory index instead of crashing.
 
+Compliance RAG flow:
+
+1. Exact tools screen watchlist, blacklist, and PEP CSV files.
+2. Qdrant indexes compliance knowledge from `data/compliance_knowledge/`.
+3. The Compliance Agent builds a semantic query from exact findings, customer
+   fields, and extracted document text.
+4. Retrieved RAG context is passed to the LLM compliance reasoning step and
+   stored as tool evidence.
+
 For true concurrent access, run Qdrant as a server and set:
 
 ```env
@@ -302,3 +311,10 @@ docker run -p 6333:6333 qdrant/qdrant
 
 If Qdrant dependencies are unavailable, compliance screening still works from
 CSV files and records `QDRANT_UNAVAILABLE` as tool evidence.
+
+If Hugging Face prints unauthenticated download warnings for the embedding
+model, optionally set:
+
+```bash
+export HF_TOKEN=your_huggingface_token
+```
