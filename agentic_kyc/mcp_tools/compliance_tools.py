@@ -5,7 +5,6 @@ from pathlib import Path
 
 from rapidfuzz import fuzz
 
-from services.qdrant_service import QdrantService
 from mcp_tools.identity_tools import normalize_name
 from services.qdrant_manager import get_qdrant
 
@@ -192,8 +191,17 @@ def retrieve_compliance_context(
     findings: list[dict],
     knowledge_dir: Path,
 ) -> list[dict]:
-
-    qdrant = get_qdrant()
+    try:
+        qdrant = get_qdrant()
+    except Exception as exc:
+        return [
+            {
+                "score": 0,
+                "source": "QDRANT_UNAVAILABLE",
+                "content": f"Compliance RAG unavailable: {exc}",
+                "risk": "UNKNOWN",
+            }
+        ]
 
     #
     # Auto-ingest on first run
@@ -263,10 +271,20 @@ def retrieve_compliance_context(
 
     query = " ".join(query_parts)
 
-    return qdrant.search(
-        query=query,
-        limit=5,
-    )
+    try:
+        return qdrant.search(
+            query=query,
+            limit=5,
+        )
+    except Exception as exc:
+        return [
+            {
+                "score": 0,
+                "source": "QDRANT_SEARCH_ERROR",
+                "content": f"Compliance RAG search failed: {exc}",
+                "risk": "UNKNOWN",
+            }
+        ]
 
 
 def run_compliance_screening(

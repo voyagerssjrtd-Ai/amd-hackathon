@@ -280,3 +280,25 @@ The workflow is implemented with `langgraph.graph.StateGraph` in `app.py`.
 - `reviewer_decisions`: human override decisions and notes
 - `agent_execution_logs`: auditable timeline of each agent action
 - `agent_evidence`: structured evidence emitted by every agent
+
+## Qdrant Compliance RAG
+
+The compliance tools can use embedded local Qdrant at `database/qdrant`.
+Embedded Qdrant allows only one active client for the same storage folder. If
+Streamlit reruns or multiple terminals collide, the app now falls back to an
+in-memory index instead of crashing.
+
+For true concurrent access, run Qdrant as a server and set:
+
+```env
+QDRANT_URL=http://127.0.0.1:6333
+```
+
+Then start Qdrant separately:
+
+```bash
+docker run -p 6333:6333 qdrant/qdrant
+```
+
+If Qdrant dependencies are unavailable, compliance screening still works from
+CSV files and records `QDRANT_UNAVAILABLE` as tool evidence.
