@@ -28,6 +28,8 @@ def run_document_agent(state: dict) -> dict:
     pan_data = normalize_extraction_confidence(pan_data)
     aadhaar_data = normalize_extraction_confidence(aadhaar_data)
     extracted = merge_document_data(pan_data, aadhaar_data)
+    document_evidence = build_document_evidence(classified, pan_data, aadhaar_data, pan_text, aadhaar_text)
+    document_confidence = calculate_document_confidence(pan_data, aadhaar_data)
     timeline = state.get("timeline", [])
     timeline.append(
         {
@@ -50,6 +52,8 @@ def run_document_agent(state: dict) -> dict:
             "pan": preview_text(pan_text),
             "aadhaar": preview_text(aadhaar_text),
         },
+        "document_evidence": document_evidence,
+        "document_confidence": document_confidence,
         "extracted_data": extracted,
         "timeline": timeline,
     }
@@ -113,6 +117,79 @@ def normalize_extraction_confidence(data: dict) -> dict:
     present = sum(1 for key in ["name", "dob", "pan_number", "aadhaar_number", "address"] if data.get(key))
     data["extraction_confidence"] = max(int(data.get("extraction_confidence") or 0), min(100, present * 25))
     return data
+
+
+def build_document_evidence(
+    classified: dict,
+    pan_data: dict,
+    aadhaar_data: dict,
+    pan_text: str,
+    aadhaar_text: str,
+) -> list[dict]:
+    rows: list[dict] = []
+    for item in classified.get("documents", []):
+        rows.append(
+            {
+                "document": item.get("filename", ""),
+                "type": item.get("type", "UNKNOWN"),
+                "evidence_type": "classification",
+                "confidence": confidence_for_type(item.get("type", ""), pan_data, aadhaar_data),
+                "evidence": item.get("text_preview", ""),
+            }
+        )
+    rows.extend(
+        [
+            {
+                "document": "PAN",
+                "type": "PAN",
+                "evidence_type": "fields",
+                "confidence": pan_data.get("extraction_confidence", 0),
+                "evidence": ", ".join(fields_found(pan_data)) or "No PAN fields extracted",
+            },
+            {
+                "document": "PAN",
+                "type": "PAN",
+                "evidence_type": "ocr_preview",
+                "confidence": pan_data.get("extraction_confidence", 0),
+                "evidence": preview_text(pan_text),
+            },
+            {
+                "document": "AADHAAR",
+                "type": "AADHAAR",
+                "evidence_type": "fields",
+                "confidence": aadhaar_data.get("extraction_confidence", 0),
+                "evidence": ", ".join(fields_found(aadhaar_data)) or "No Aadhaar fields extracted",
+            },
+            {
+                "document": "AADHAAR",
+                "type": "AADHAAR",
+                "evidence_type": "ocr_preview",
+                "confidence": aadhaar_data.get("extraction_confidence", 0),
+                "evidence": preview_text(aadhaar_text),
+            },
+        ]
+    )
+    return rows
+
+
+def calculate_document_confidence(pan_data: dict, aadhaar_data: dict) -> dict:
+    pan_confidence = int(pan_data.get("extraction_confidence") or 0)
+    aadhaar_confidence = int(aadhaar_data.get("extraction_confidence") or 0)
+    values = [value for value in [pan_confidence, aadhaar_confidence] if value]
+    overall = round(sum(values) / len(values)) if values else 0
+    return {"PAN": pan_confidence, "AADHAAR": aadhaar_confidence, "OVERALL": overall}
+
+
+def confidence_for_type(document_type: str, pan_data: dict, aadhaar_data: dict) -> int:
+    if document_type == "PAN":
+        return int(pan_data.get("extraction_confidence") or 0)
+    if document_type == "AADHAAR":
+        return int(aadhaar_data.get("extraction_confidence") or 0)
+    return 0
+
+
+def fields_found(data: dict) -> list[str]:
+    return [field for field in ["name", "dob", "pan_number", "aadhaar_number", "address"] if data.get(field)]
 
 
 def preview_text(text: str, limit: int = 1200) -> str:

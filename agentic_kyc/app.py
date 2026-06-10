@@ -33,24 +33,39 @@ SAMPLES_DIR = ROOT_DIR / "data" / "sample_documents"
 
 class KYCState(TypedDict, total=False):
     document_paths: list[str]
+
     pan_path: str
     aadhaar_path: str
     financial_path: str
+
     pan_text: str
     aadhaar_text: str
+
     pan_data: dict[str, Any]
     aadhaar_data: dict[str, Any]
-    extracted_data: dict[str, str]
+
+    extracted_data: dict[str, Any]
+
     entity_result: dict[str, Any]
     identity_result: dict[str, Any]
     compliance_result: dict[str, Any]
     financial_result: dict[str, Any]
     risk_result: dict[str, Any]
     decision_result: dict[str, Any]
+
     document_classification: dict[str, Any]
+
     document_texts: dict[str, str]
+
+    document_evidence: list[dict[str, Any]]
+
+    document_confidence: dict[str, int]
+
     report_path: str
+
     timeline: list[dict[str, str]]
+
+    case_id: int
 
 
 @st.cache_resource
@@ -152,6 +167,8 @@ def render_results() -> None:
         return
 
     extracted = state.get("extracted_data", {})
+    document_evidence = state.get("document_evidence", [])
+    document_confidence = state.get("document_confidence", {})
     identity = state.get("identity_result", {})
     compliance = state.get("compliance_result", {})
     financial = state.get("financial_result", {})
@@ -171,7 +188,9 @@ def render_results() -> None:
             {"Field": "Name", "Value": extracted.get("name", "")},
             {"Field": "DOB", "Value": extracted.get("dob", "")},
             {"Field": "PAN", "Value": extracted.get("pan_number", "")},
+            {"Field": "PAN Confidence", "Value": f"{document_confidence.get('PAN', 0)}%"},
             {"Field": "Aadhaar", "Value": mask_aadhaar(extracted.get("aadhaar_number", ""))},
+            {"Field": "Aadhaar Confidence", "Value": f"{document_confidence.get('AADHAAR', 0)}%"},
             {"Field": "Address", "Value": extracted.get("address", "")},
         ],
         hide_index=True,
@@ -180,7 +199,19 @@ def render_results() -> None:
 
     st.markdown("#### Document Extraction Evidence")
     with st.expander("Document classification and OCR/VL previews", expanded=True):
+
+        st.subheader("Document Classification")
+
         st.json(state.get("document_classification", {}))
+
+        st.subheader("Extraction Confidence")
+
+        st.json(document_confidence)
+
+        st.subheader("Document Evidence")
+
+        st.json(mask_sensitive_payloads(document_evidence))
+
     e1, e2 = st.columns(2)
     with e1:
         st.write("PAN extraction")
@@ -189,8 +220,11 @@ def render_results() -> None:
         st.write("Aadhaar extraction")
         st.json(mask_sensitive_payload(state.get("aadhaar_data", {})))
 
-    if not extracted.get("pan_number"):
-        st.error("PAN number was not extracted. The case must be REVIEW until PAN is manually validated or re-uploaded.")
+    if not extracted.get("pan_number") or document_confidence.get("PAN", 0) < 60:
+        st.error(
+            "PAN extraction confidence is low. "
+            "The case must be REVIEW until PAN is manually validated."
+        )
 
     c1, c2 = st.columns(2)
     with c1:
@@ -315,7 +349,10 @@ def save_upload(uploaded_file, prefix: str) -> Path:
 
 
 def save_uploads(uploaded_files) -> list[Path]:
-    return [save_upload(uploaded_file, f"doc_{index}") for index, uploaded_file in enumerate(uploaded_files, start=1)]
+    return [
+        save_upload(uploaded_file, f"doc_{index}")
+        for index, uploaded_file in enumerate(uploaded_files, start=1)
+    ]
 
 
 def ensure_directories() -> None:
@@ -409,6 +446,21 @@ def mask_sensitive_payload(payload: dict[str, Any]) -> dict[str, Any]:
     masked = dict(payload)
     if masked.get("aadhaar_number"):
         masked["aadhaar_number"] = mask_aadhaar(str(masked["aadhaar_number"]))
+    return masked
+
+
+def mask_sensitive_payloads(evidences: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    masked = []
+    for item in evidences:
+        entry = dict(item)
+        if entry.get("aadhaar_number"):
+            entry["aadhaar_number"] = mask_aadhaar(str(entry["aadhaar_number"]))
+        fields = dict(entry.get("fields", {}))
+        if fields.get("aadhaar_number"):
+            fields["aadhaar_number"] = mask_aadhaar(str(fields["aadhaar_number"]))
+        if fields:
+            entry["fields"] = fields
+        masked.append(entry)
     return masked
 
 

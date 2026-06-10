@@ -46,7 +46,7 @@ AADHAAR_TEXT:
         except Exception:
             return rule_based_extract(pan_text, aadhaar_text)
 
-    def extract_document_json(self, document_type: str, document_text: str) -> dict[str, Any]:
+    def extract_document_json(self, document_type: str, text: str) -> dict[str, Any]:
         prompt = f"""
 You are a specialist KYC extraction agent for one Indian identity document.
 Document type: {document_type}
@@ -56,7 +56,7 @@ Return strict JSON with keys: name, dob, pan_number, aadhaar_number, address, ex
 `evidence` must list the exact visible clues used. If a field is not visible, use an empty string.
 
 DOCUMENT_TEXT:
-{document_text}
+{text}
 """
         try:
             response = self.client.chat.completions.create(
@@ -71,7 +71,7 @@ DOCUMENT_TEXT:
             content = response.choices[0].message.content or "{}"
             return normalize_document_json(parse_json_object(content))
         except Exception:
-            return normalize_document_json(rule_based_extract_single(document_text))
+            return normalize_document_json(rule_based_extract_single(text))
 
     def verify_identity(self, pan_data: dict[str, Any], aadhaar_data: dict[str, Any]) -> dict[str, Any]:
         prompt = f"""
