@@ -50,7 +50,7 @@ def enforce_compliance_gates(
 ) -> dict:
 
     if any(
-        item.get("source") == "BLACKLIST"
+        item.get("source") == "blacklist"
         for item in findings
     ):
         result["status"] = "ESCALATE"
