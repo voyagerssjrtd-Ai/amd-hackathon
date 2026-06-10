@@ -1,0 +1,19 @@
+Regulated entities should adopt a risk-based approach to customer due diligence.
+
+Customer identification must rely on reliable and independent source documents.
+
+Enhanced Due Diligence is expected for higher-risk customer categories.
+
+Risk classification should consider customer profile, geography, and transactional behavior.
+
+Ongoing monitoring is required for customers classified as high risk.
+
+Politically exposed persons require additional scrutiny during onboarding.
+
+Suspicious indicators identified during onboarding should be escalated for investigation.
+
+Institutions should maintain adequate records supporting KYC decisions.
+
+Automated decision systems should provide explainable outcomes.
+
+Human oversight should remain available for complex or high-risk cases.

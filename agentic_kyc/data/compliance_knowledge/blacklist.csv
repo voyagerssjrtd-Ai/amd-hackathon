@@ -1,0 +1,11 @@
+name,risk,reason
+Fake Person,HIGH,Confirmed identity fraud case
+Demo Customer,HIGH,Previously submitted forged documents
+Test User,HIGH,Internal blacklist for repeated KYC fraud attempts
+Rakesh Iyer,HIGH,Confirmed mule account operator
+Pooja Menon,HIGH,Associated with fraudulent lending activity
+Anil Das,HIGH,Synthetic identity detected during investigation
+Suresh Patel,HIGH,Document tampering confirmed
+Kavita Joshi,HIGH,Blacklisted by fraud monitoring team
+Rahul Bhat,HIGH,Repeat offender across onboarding channels
+Meena Krishnan,HIGH,Known impersonation case

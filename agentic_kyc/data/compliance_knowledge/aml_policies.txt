@@ -1,0 +1,19 @@
+Politically Exposed Persons (PEPs) require Enhanced Due Diligence.
+
+Enhanced Due Diligence should include source-of-funds verification and senior management approval.
+
+Document tampering indicators should result in escalation for manual review.
+
+Repeated inconsistencies between PAN and Aadhaar information should increase risk classification.
+
+Adverse media findings should trigger enhanced monitoring.
+
+Customers identified on internal blacklists must be escalated immediately.
+
+Missing critical KYC documents should prevent automatic approval.
+
+Synthetic identity indicators require escalation to fraud investigation teams.
+
+Financial profiles inconsistent with declared occupation should be reviewed.
+
+All KYC decisions must remain explainable and auditable.

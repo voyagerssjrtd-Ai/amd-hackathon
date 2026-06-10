@@ -1,3 +1,4 @@
+import csv
 from __future__ import annotations
 
 import uuid
@@ -9,6 +10,119 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
+
+def load_compliance_knowledge(
+    self,
+    knowledge_dir: str | Path,
+) -> int:
+    """
+    Loads AML knowledge and fraud intelligence into Qdrant.
+
+    Indexed:
+    - fraud_cases.csv
+    - aml_policies.txt
+    - rbi_guidelines.txt
+    """
+
+    knowledge_dir = Path(knowledge_dir)
+
+    documents: list[dict] = []
+
+    #
+    # FRAUD CASES
+    #
+
+    fraud_file = knowledge_dir / "fraud_cases.csv"
+
+    if fraud_file.exists():
+
+        with fraud_file.open(
+            encoding="utf-8",
+        ) as file:
+
+            reader = csv.DictReader(file)
+
+            for row in reader:
+
+                documents.append(
+                    {
+                        "source": "FRAUD_CASE",
+
+                        "content":
+                            row.get(
+                                "description",
+                                "",
+                            ),
+
+                        "risk":
+                            row.get(
+                                "risk",
+                                "UNKNOWN",
+                            ),
+                    }
+                )
+
+    #
+    # AML POLICIES
+    #
+
+    aml_file = knowledge_dir / "aml_policies.txt"
+
+    if aml_file.exists():
+
+        for line in aml_file.read_text(
+            encoding="utf-8",
+        ).splitlines():
+
+            line = line.strip()
+
+            if line:
+
+                documents.append(
+                    {
+                        "source":
+                            "AML_POLICY",
+
+                        "content":
+                            line,
+
+                        "risk":
+                            "MEDIUM",
+                    }
+                )
+
+    #
+    # RBI GUIDELINES
+    #
+
+    rbi_file = knowledge_dir / "rbi_guidelines.txt"
+
+    if rbi_file.exists():
+
+        for line in rbi_file.read_text(
+            encoding="utf-8",
+        ).splitlines():
+
+            line = line.strip()
+
+            if line:
+
+                documents.append(
+                    {
+                        "source":
+                            "RBI_GUIDELINE",
+
+                        "content":
+                            line,
+
+                        "risk":
+                            "MEDIUM",
+                    }
+                )
+
+    return self.index_documents(
+        documents,
+    )
 
 from sentence_transformers import SentenceTransformer
 

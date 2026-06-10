@@ -1,0 +1,11 @@
+category,risk,description
+Synthetic Identity,HIGH,Identity built using real PAN with fake Aadhaar details.
+Document Tampering,HIGH,Salary slips altered to inflate income eligibility.
+Forged PAN,HIGH,PAN cards manipulated through image editing tools.
+Fake Aadhaar,HIGH,Aadhaar cards generated using non-government templates.
+Income Inflation,MEDIUM,Applicants overstating salary to obtain higher limits.
+Employment Fraud,HIGH,Fictitious employers created to validate applications.
+Address Manipulation,MEDIUM,Temporary addresses used to evade monitoring.
+PEP Concealment,HIGH,Failure to disclose politically exposed person status.
+Watchlist Evasion,HIGH,Minor name variations used to avoid detection.
+Impersonation,HIGH,Identity theft involving legitimate citizen credentials.
