@@ -1,4 +1,5 @@
 from __future__ import annotations
+from unittest import result
 
 from services.llm_service import LLMService
 from services.scoring_service import calculate_risk
@@ -36,13 +37,13 @@ def run_risk_agent(state: dict) -> dict:
     )
     return {**state, "risk_result": result, "timeline": timeline}
 
-
 def enforce_risk_gates(result: dict, payload: dict) -> dict:
     extracted = payload.get("extracted_data", {})
     pan_data = payload.get("pan_data", {})
     findings = payload.get("compliance_result", {}).get("findings", [])
     document_evidence = payload.get("document_evidence", [])
-
+    reasons = result.get("reasons", [])
+    score = int(result.get("risk_score", 100))
     fraud_indicators = [
         "not a valid id",
         "sample only",
@@ -65,10 +66,7 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
                 reasons.append(
                     f"Fraud indicator detected: '{indicator}'."
                 )
-
                 break
-    reasons = result.get("reasons", [])
-    score = int(result.get("risk_score", 100))
 
     if extracted.get("pan_number"):
         reasons = [
@@ -86,14 +84,16 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
         score = max(score, 65)
     if any(item.get("source") == "blacklist" for item in findings):
         score = max(score, 90)
-        score = min(100, score)
-        level = (
-            "HIGH"
-            if score >= 75
-            else "MEDIUM"
-            if score >= 40
-            else "LOW"
-        )
+
+    score = min(100, score)
+
+    level = (
+        "HIGH"
+        if score >= 75
+        else "MEDIUM"
+        if score >= 40
+        else "LOW"
+    )
     return {"risk_score": score, "risk_level": level, "reasons": dedupe(reasons)}
 
 
@@ -130,10 +130,10 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
     else:
         factors.append({"factor": "Financial document not provided", "impact": 0, "evidence": "Optional for this MVP"})
 
-        factor_score = calculate_factor_score(
-        factors,
-        compliance,
-    )
+    factor_score = calculate_factor_score(
+    factors,
+    compliance,
+)
 
     score = max(
         int(result.get("risk_score", 0)),
