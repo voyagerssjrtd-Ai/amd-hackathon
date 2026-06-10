@@ -15,3 +15,4 @@ qdrant-client
 sentence-transformers
 torch
 rapidfuzz
+torchvision
