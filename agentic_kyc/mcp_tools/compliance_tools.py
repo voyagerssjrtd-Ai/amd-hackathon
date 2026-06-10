@@ -231,6 +231,18 @@ def retrieve_compliance_context(
                 "",
             )
         )
+        query_parts.append(
+            finding.get(
+                "reason",
+                "",
+            )
+        )
+        query_parts.append(
+            finding.get(
+                "risk",
+                "",
+            )
+        )
 
     for key in ["name", "dob", "pan_number", "address"]:
         value = str(customer_data.get(key, "") or "").strip()
@@ -241,13 +253,6 @@ def retrieve_compliance_context(
         value = str(customer_data.get(key, "") or "").strip()
         if value:
             query_parts.append(value[:1000])
-
-        query_parts.append(
-            finding.get(
-                "reason",
-                "",
-            )
-        )
 
     #
     # Fraud indicators
