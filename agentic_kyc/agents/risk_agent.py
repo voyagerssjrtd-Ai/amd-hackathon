@@ -1,5 +1,4 @@
 from __future__ import annotations
-from unittest import result
 
 from services.llm_service import LLMService
 from services.scoring_service import calculate_risk
@@ -38,9 +37,11 @@ def run_risk_agent(state: dict) -> dict:
     return {**state, "risk_result": result, "timeline": timeline}
 
 def enforce_risk_gates(result: dict, payload: dict) -> dict:
+    reasons = result.get("reasons", [])
+    score = int(result.get("risk_score", 100))
     financial = payload.get("financial_result", {})
     if financial.get("status") == "TAMPERED":
-        score = max(score, 90)
+        score = max(score, 95)
         reasons.extend(
             financial.get("evidence", [])
         )
@@ -48,8 +49,6 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
     pan_data = payload.get("pan_data", {})
     findings = payload.get("compliance_result", {}).get("findings", [])
     document_evidence = payload.get("document_evidence", [])
-    reasons = result.get("reasons", [])
-    score = int(result.get("risk_score", 100))
     fraud_indicators = [
         "not a valid id",
         "sample only",
@@ -67,7 +66,7 @@ def enforce_risk_gates(result: dict, payload: dict) -> dict:
 
         for indicator in fraud_indicators:
             if indicator in text:
-                score = 95
+                score = max(score, 95)
 
                 reasons.append(
                     f"Fraud indicator detected: '{indicator}'."
@@ -118,7 +117,9 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
     identity_score = int(identity.get("identity_match_score", 0))
     if identity_score >= 85:
         factors.append({"factor": "High identity confidence", "impact": -15, "evidence": identity_score})
-    elif identity_score < 60:
+    elif identity_score >= 60:
+        factors.append({"factor": "Moderate identity confidence", "impact": 15, "evidence": identity_score})    
+    elif identity_score < 85:
         factors.append({"factor": "Low identity confidence", "impact": 25, "evidence": identity_score})
 
     findings = compliance.get("findings", [])
@@ -128,14 +129,60 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
     else:
         factors.append({"factor": "Compliance screening clear", "impact": -10, "evidence": "No watchlist or blacklist hits"})
 
-    if financial.get("status") == "ANALYZED":
-        if financial.get("financial_risk") == "LOW":
-            factors.append({"factor": "Stable financial profile", "impact": -10, "evidence": financial})
-        elif financial.get("financial_risk") == "HIGH":
-            factors.append({"factor": "High financial risk", "impact": 20, "evidence": financial})
-    else:
-        factors.append({"factor": "Financial document not provided", "impact": 0, "evidence": "Optional for this MVP"})
+    if financial.get("status") == "TAMPERED":
 
+        factors.append(
+            {
+                "factor": "Tampered financial document",
+                "impact": 50,
+                "evidence": financial.get(
+                    "evidence",
+                    [],
+                ),
+            }
+        )
+
+    elif financial.get("status") == "ANALYZED":
+
+        if financial.get("financial_risk") == "LOW":
+
+            factors.append(
+                {
+                    "factor": "Stable financial profile",
+                    "impact": -10,
+                    "evidence": financial,
+                }
+            )
+
+        elif financial.get("financial_risk") == "HIGH":
+
+            factors.append(
+                {
+                    "factor": "High financial risk",
+                    "impact": 20,
+                    "evidence": financial,
+                }
+            )
+
+        elif financial.get("financial_risk") == "MEDIUM":
+
+            factors.append(
+                {
+                    "factor": "Moderate financial risk",
+                    "impact": 10,
+                    "evidence": financial,
+                }
+            )
+
+    else:
+
+        factors.append(
+            {
+                "factor": "Financial document not provided",
+                "impact": 0,
+                "evidence": "Optional for this MVP",
+            }
+        )
     factor_score = calculate_factor_score(
     factors,
     compliance,
@@ -145,8 +192,6 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
         int(result.get("risk_score", 0)),
         factor_score,
     )
-
-    result["risk_score"] = score
     result["risk_score"] = score
     result["risk_level"] = "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW"
     result["factors"] = factors
@@ -157,15 +202,25 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
 
 def calculate_factor_score(factors: list[dict], compliance: dict) -> int:
     score = 50 + sum(int(item.get("impact", 0)) for item in factors)
+
     findings = compliance.get("findings", [])
+
     if any(item.get("source") == "blacklist" for item in findings):
         score = max(score, 90)
+
     elif any(item.get("source") == "watchlist" for item in findings):
         score = max(score, 65)
+
     if any(item.get("factor") == "PAN missing" for item in factors):
         score = max(score, 75)
-    return max(0, min(100, score))
 
+    if any(
+        item.get("factor") == "Tampered financial document"
+        for item in factors
+    ):
+        score = max(score, 90)
+
+    return max(0, min(100, score))
 
 def remove_contradictory_reasons(reasons: list[str], pan_present: bool) -> list[str]:
     if not pan_present:
