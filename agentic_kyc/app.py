@@ -258,12 +258,25 @@ def render_results() -> None:
         with st.expander("Compliance tool evidence"):
             st.json(compliance.get("tool_evidence", {}))
         st.markdown("#### Financial Profile")
-        st.json(financial)
-
-    render_timeline(state.get("timeline", []))
-    render_human_review(state)
-    render_report_download(state)
-
+        st.metric(
+            "Monthly Income",
+            f"₹ {financial.get('monthly_income', 0):,.0f}"
+            if financial.get("monthly_income")
+            else "N/A"
+        )
+        st.metric(
+            "Debt Ratio",
+            financial.get("debt_ratio", "N/A")
+        )
+        st.metric(
+            "Financial Risk",
+            financial.get("financial_risk", "UNKNOWN")
+        )
+        with st.expander("Financial Evidence"):
+            st.write(financial.get("evidence", []))
+            render_timeline(state.get("timeline", []))
+            render_human_review(state)
+            render_report_download(state)
 
 def render_timeline(timeline: list[dict[str, str]]) -> None:
     st.markdown("#### Agent Execution Timeline")
