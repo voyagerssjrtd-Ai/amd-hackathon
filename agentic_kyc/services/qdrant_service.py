@@ -1,9 +1,7 @@
-import csv
 from __future__ import annotations
-
+import csv
 import uuid
 from pathlib import Path
-
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
