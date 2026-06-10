@@ -38,6 +38,12 @@ def run_risk_agent(state: dict) -> dict:
     return {**state, "risk_result": result, "timeline": timeline}
 
 def enforce_risk_gates(result: dict, payload: dict) -> dict:
+    financial = payload.get("financial_result", {})
+    if financial.get("status") == "TAMPERED":
+        score = max(score, 90)
+        reasons.extend(
+            financial.get("evidence", [])
+        )
     extracted = payload.get("extracted_data", {})
     pan_data = payload.get("pan_data", {})
     findings = payload.get("compliance_result", {}).get("findings", [])

@@ -21,7 +21,6 @@ def extract_amount(patterns: list[str], text: str) -> float | None:
 
     return None
 
-
 def analyze_financial_document(path: str | None) -> dict:
     if not path:
         return {
@@ -38,6 +37,26 @@ def analyze_financial_document(path: str | None) -> dict:
         }
 
     text = extract_text_from_document(Path(path))
+    text_lower = text.lower()
+    tampering_reasons: list[str] = []
+    #
+    # Fraud indicators.
+    #
+    fraud_markers = [
+        "sample only",
+        "test data",
+        "not a valid id",
+        "specimen",
+        "training data",
+    ]
+
+    for marker in fraud_markers:
+
+        if marker in text_lower:
+
+            tampering_reasons.append(
+                f"Document contains fraud marker: '{marker}'."
+            )
 
     if not re.search(
         r"bank statement|salary|payslip|credited|debit|credit|balance|emi|loan|account statement",
@@ -75,6 +94,13 @@ def analyze_financial_document(path: str | None) -> dict:
         ],
         text,
     )
+    corrected_amount = extract_amount(
+        [
+            r"Correct\s*Figure\s*of\s*₹?\s*([0-9,]+)",
+            r"Corrected\s*Amount\s*₹?\s*([0-9,]+)",
+        ],
+        text,
+    )
 
     annual_income = extract_amount(
         [
@@ -97,7 +123,21 @@ def analyze_financial_document(path: str | None) -> dict:
 
     elif annual_income:
         monthly_income = round(annual_income / 12, 2)
+    
+    #
+    # Conflicting salary detection.
+    #
+    if (
+        net_pay
+        and corrected_amount
+        and abs(net_pay - corrected_amount) > 500
+    ):
 
+        tampering_reasons.append(
+            f"Conflicting salary values detected "
+            f"(Net Pay={net_pay}, "
+            f"Correct Figure={corrected_amount})."
+        )
     #
     # Average balance only for bank statements.
     #
@@ -141,11 +181,33 @@ def analyze_financial_document(path: str | None) -> dict:
         if monthly_income
         else None
     )
+    #
+    # Tampering override.
+    #
+    if tampering_reasons:
 
+        return {
+            "tool": "financial.analyze_document",
+
+            "status": "TAMPERED",
+
+            "monthly_income": monthly_income,
+
+            "average_balance": average_balance,
+
+            "debt_ratio": debt_ratio,
+
+            "employment_stability": "UNKNOWN",
+
+            "financial_risk": "HIGH",
+
+            "tampering_detected": True,
+
+            "evidence": tampering_reasons,
+        }
     #
     # Financial Risk Assessment
     #
-
     if monthly_income is None:
 
         stability = "UNKNOWN"
