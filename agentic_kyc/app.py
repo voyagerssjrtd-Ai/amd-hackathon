@@ -274,13 +274,28 @@ def render_results() -> None:
         )
         with st.expander("Financial Evidence"):
             st.write(financial.get("evidence", []))
-            render_timeline(state.get("timeline", []))
-            render_human_review(state)
-            render_report_download(state)
+    render_timeline(state.get("timeline", []))
+    render_human_review(state)
+    render_report_download(state)
 
 def render_timeline(timeline: list[dict[str, str]]) -> None:
     st.markdown("#### Agent Execution Timeline")
-    cols = st.columns(len(timeline) or 1)
+    cols = st.columns(4)
+
+    for index, item in enumerate(timeline):
+
+        with cols[index % 4]:
+
+            st.markdown(
+                f"""
+                <div class="timeline-step">
+                    <div class="timeline-check">✓</div>
+                    <strong>{item['agent']}</strong><br>
+                    <small>{item['summary']}</small>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     for col, item in zip(cols, timeline):
         with col:
             st.markdown(
