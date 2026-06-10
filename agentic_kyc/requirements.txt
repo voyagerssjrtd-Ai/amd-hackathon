@@ -11,3 +11,6 @@ rapidfuzz==3.11.0
 pydantic==2.10.4
 pillow==10.4.0
 pymupdf==1.25.1
+qdrant-client
+sentence-transformers
+torch
