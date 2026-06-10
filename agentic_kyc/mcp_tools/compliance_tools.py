@@ -7,7 +7,7 @@ from rapidfuzz import fuzz
 
 from services.qdrant_service import QdrantService
 from mcp_tools.identity_tools import normalize_name
-
+from services.qdrant_manager import get_qdrant
 
 MATCH_THRESHOLD = 90
 
@@ -52,7 +52,7 @@ def screen_watchlist(
 
                 findings.append(
                     {
-                        "source": "WATCHLIST",
+                        "source": "watchlist",
                         "matched_name": row.get("name", ""),
                         "risk": row.get(
                             "risk",
@@ -109,7 +109,7 @@ def screen_blacklist(
 
                 findings.append(
                     {
-                        "source": "BLACKLIST",
+                        "source": "blacklist",
                         "matched_name": row.get("name", ""),
                         "risk": row.get(
                             "risk",
@@ -166,7 +166,7 @@ def screen_pep(
 
                 findings.append(
                     {
-                        "source": "PEP",
+                        "source": "pep",
                         "matched_name": row.get("name", ""),
                         "designation": row.get(
                             "designation",
@@ -193,9 +193,7 @@ def retrieve_compliance_context(
     knowledge_dir: Path,
 ) -> list[dict]:
 
-    qdrant = QdrantService()
-
-    qdrant.initialize()
+    qdrant = get_qdrant()
 
     #
     # Auto-ingest on first run
