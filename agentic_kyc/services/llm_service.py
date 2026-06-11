@@ -248,45 +248,161 @@ CASE:
             parsed = parse_json_object(response.choices[0].message.content or "{}")
             return normalize_risk_json(parsed)
         except Exception:
-            raise
-
+            return {
+                "risk_score": 75,
+                "risk_level": "HIGH",
+                "reasons": [
+                    "Risk scoring unavailable.",
+                    "Manual review required."
+                ],
+            }
     def assess_compliance(self, payload: dict[str, Any]) -> dict[str, Any]:
+        rag_context = "\n".join(
+            [
+                f"[{item.get('source', 'UNKNOWN')}] {item.get('content', '')}"
+                for item in payload.get("rag_context", [])
+            ]
+        )
+
         prompt = f"""
-You are a Compliance Screening Agent. Review simulated watchlist and blacklist evidence.
-Return strict JSON:
-{{
-  "status": "CLEAR|REVIEW",
-  "findings": []
-}}
+    You are an AML/KYC compliance officer.
 
-Rules:
-- If there are any candidate findings, status must be REVIEW.
-- Preserve source, matched_name, match_score, reason, severity, and evidence for each real finding.
-- If no findings exist, status is CLEAR and findings is [].
+    CUSTOMER:
+    {json.dumps(payload.get("customer", {}), ensure_ascii=False, indent=2)}
 
-SCREENING_PAYLOAD:
-{json.dumps(payload, ensure_ascii=False)}
-"""
+    SCREENING FINDINGS:
+    {json.dumps(payload.get("candidate_findings", []), ensure_ascii=False, indent=2)}
+
+    RELEVANT COMPLIANCE KNOWLEDGE:
+    {rag_context}
+
+    Determine whether the customer should be:
+
+    - CLEAR
+    - REVIEW
+    - ESCALATE
+
+    Guidelines:
+    - Any confirmed blacklist or sanctions match → ESCALATE.
+    - Politically Exposed Person (PEP) matches → REVIEW unless additional risk factors exist.
+    - Watchlist matches → REVIEW.
+    - No findings and no compliance concerns → CLEAR.
+    - Use the retrieved compliance knowledge when relevant.
+
+    Return STRICT JSON only:
+
+    {{
+        "status": "CLEAR|REVIEW|ESCALATE",
+        "explanation": "Detailed explanation",
+        "reasons": [
+            "Reason 1",
+            "Reason 2"
+        ]
+    }}
+    """
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": "Return valid JSON only."},
-                    {"role": "user", "content": prompt},
+                    {
+                        "role": "system",
+                        "content": "Return valid JSON only.",
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    },
                 ],
                 temperature=0,
                 max_tokens=900,
             )
-            parsed = parse_json_object(response.choices[0].message.content or "{}")
-            status = str(parsed.get("status", "REVIEW")).upper()
-            return {
-                "status": "CLEAR" if status == "CLEAR" and not payload.get("candidate_findings") else "REVIEW"
-                if payload.get("candidate_findings")
-                else "CLEAR",
-                "findings": parsed.get("findings", payload.get("candidate_findings", [])),
+
+            parsed = parse_json_object(
+                response.choices[0].message.content or "{}"
+            )
+
+            status = str(
+                parsed.get("status", "REVIEW")
+            ).upper()
+
+            findings = payload.get(
+                "candidate_findings",
+                []
+            )
+
+            # Enforce business rules
+# Enforce deterministic compliance rules
+
+            sources = {
+                str(f.get("source", "")).lower()
+                for f in findings
+                if isinstance(f, dict)
             }
-        except Exception:
-            raise
+
+            if "blacklist" in sources:
+                status = "ESCALATE"
+
+            elif "watchlist" in sources:
+                if status == "CLEAR":
+                    status = "REVIEW"
+
+            elif "pep" in sources:
+                if status == "CLEAR":
+                    status = "REVIEW"
+
+            if status not in {
+                "CLEAR",
+                "REVIEW",
+                "ESCALATE",
+            }:
+                status = "REVIEW"
+
+            reasons = parsed.get(
+                "reasons",
+                []
+            )
+
+            if isinstance(reasons, str):
+                reasons = [reasons]
+
+            return {
+                "status": status,
+                "explanation": str(
+                    parsed.get(
+                        "explanation",
+                        ""
+                    )
+                ),
+                "reasons": [
+                    str(reason)
+                    for reason in reasons
+                    if str(reason).strip()
+                ],
+                "findings": findings,
+            }
+
+        except Exception as e:
+            findings = payload.get(
+                "candidate_findings",
+                []
+            )
+
+            status = (
+                "REVIEW"
+                if findings
+                else "CLEAR"
+            )
+
+            return {
+                "status": status,
+                "explanation":
+                    f"Compliance assessment fallback triggered: {str(e)}",
+                "reasons": [
+                    "LLM compliance assessment unavailable."
+                ],
+                "findings": findings,
+            }
 
     def make_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         prompt = f"""
@@ -321,7 +437,14 @@ CASE:
             parsed = parse_json_object(response.choices[0].message.content or "{}")
             return normalize_decision_json(parsed)
         except Exception:
-            raise
+            return {
+                "recommendation": "REVIEW",
+                "explanation":
+                    "Decision engine unavailable. Manual review required.",
+                "evidence": {
+                    "error": "LLM decision failed."
+                },
+            }
 
     def extract_text_from_image(self, image_b64: str, mime_type: str = "image/png") -> str:
         prompt = (

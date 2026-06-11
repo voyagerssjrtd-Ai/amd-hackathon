@@ -217,6 +217,9 @@ def retrieve_compliance_context(
     knowledge_dir: Path,
 ) -> list[dict]:
 
+    if not findings:
+        return []
+
     try:
         qdrant = get_qdrant()
 
@@ -241,7 +244,7 @@ def retrieve_compliance_context(
         query_parts.append(finding.get("source", ""))
         query_parts.append(finding.get("reason", ""))
 
-    for key in ["name", "pan_number", "dob"]:
+    for key in ["name"]:
         value = str(customer_data.get(key, "") or "").strip()
 
         if value:
