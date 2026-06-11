@@ -5,6 +5,12 @@ import hashlib
 import os
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from qdrant_client import QdrantClient
+    from sentence_transformers import SentenceTransformer
+from typing import TYPE_CHECKING, Any
 
 try:
     from qdrant_client import QdrantClient
@@ -16,7 +22,6 @@ except ImportError:
     PointStruct = None
     VectorParams = None
     SentenceTransformer = None
-
 
 class QdrantService:
     """Qdrant-backed compliance RAG service.
@@ -35,8 +40,8 @@ class QdrantService:
         self.db_path = Path(os.getenv("QDRANT_PATH", str(db_path)))
         self.qdrant_url = os.getenv("QDRANT_URL", "").strip()
         self.embedding_model = os.getenv("EMBEDDING_MODEL", embedding_model)
-        self.client: QdrantClient | None = None
-        self.encoder: SentenceTransformer | None = None
+        self.client: Any = None
+        self.encoder: Any = None
         self.vector_size: int | None = None
 
     def initialize(self) -> None:
@@ -58,7 +63,7 @@ class QdrantService:
                 vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
             )
 
-    def _create_client(self) -> QdrantClient:
+    def _create_client(self) -> Any:
         if self.qdrant_url:
             return QdrantClient(url=self.qdrant_url)
         self.db_path.mkdir(parents=True, exist_ok=True)
@@ -105,7 +110,7 @@ class QdrantService:
         if not documents:
             return 0
 
-        points: list[PointStruct] = []
+        points: list[Any] = []
         for document in documents:
             content = str(document.get("content", "")).strip()
             if not content:
@@ -124,63 +129,84 @@ class QdrantService:
         self.client.upsert(collection_name=self.COLLECTION_NAME, points=points)
         return len(points)
 
-def search(self, query: str, limit: int = 5) -> list[dict]:
-    self.initialize_if_needed()
+    def search(
+        self,
+        query: str,
+        limit: int = 5,
+    ) -> list[dict]:
 
-    if not query.strip():
-        return []
+        self.initialize_if_needed()
 
-    embedding = (
-        self.encoder.encode(
-            query,
-            normalize_embeddings=True,
+        if not query.strip():
+            return []
+
+        embedding = (
+            self.encoder.encode(
+                query,
+                normalize_embeddings=True,
+            )
+            .tolist()
         )
-        .tolist()
-    )
 
-    results = (
-        self.client.query_points(
-            collection_name=self.COLLECTION_NAME,
-            query=embedding,
-            limit=limit,
+        results = (
+            self.client.query_points(
+                collection_name=self.COLLECTION_NAME,
+                query=embedding,
+                limit=limit,
+            )
+            .points
         )
-        .points
-    )
 
-    return [
-        {
-            "score": round(float(point.score), 4),
-            "source": point.payload.get(
-                "source",
-                "UNKNOWN",
-            ),
-            "content": point.payload.get(
-                "content",
-                "",
-            ),
-            "risk": point.payload.get(
-                "risk",
-                "UNKNOWN",
-            ),
-        }
-        for point in results
-    ]
+        return [
+            {
+                "score": round(float(point.score), 4),
+                "source": point.payload.get(
+                    "source",
+                    "UNKNOWN",
+                ),
+                "content": point.payload.get(
+                    "content",
+                    "",
+                ),
+                "risk": point.payload.get(
+                    "risk",
+                    "UNKNOWN",
+                ),
+            }
+            for point in results
+        ]
+
     def count(self) -> int:
         self.initialize_if_needed()
-        info = self.client.get_collection(collection_name=self.COLLECTION_NAME)
+
+        info = self.client.get_collection(
+            collection_name=self.COLLECTION_NAME,
+        )
+
         return info.points_count
 
     def delete_collection(self) -> None:
         self.initialize_if_needed()
+
         collections = self.client.get_collections()
-        existing = {collection.name for collection in collections.collections}
+
+        existing = {
+            collection.name
+            for collection in collections.collections
+        }
+
         if self.COLLECTION_NAME in existing:
-            self.client.delete_collection(collection_name=self.COLLECTION_NAME)
+            self.client.delete_collection(
+                collection_name=self.COLLECTION_NAME,
+            )
 
     def initialize_if_needed(self) -> None:
-        if self.client is None or self.encoder is None or self.vector_size is None:
+        if (
+            self.client is None
+            or self.encoder is None
+            or self.vector_size is None
+        ):
             self.initialize()
-
 
 def stable_document_key(payload: dict) -> str:
     raw = f"{payload.get('source', '')}|{payload.get('risk', '')}|{payload.get('content', '')}"
