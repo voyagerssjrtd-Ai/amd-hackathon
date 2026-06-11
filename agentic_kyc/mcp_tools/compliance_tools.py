@@ -10,6 +10,206 @@ from services.qdrant_manager import get_qdrant
 
 MATCH_THRESHOLD = 90
 
+def resolve_knowledge_file(knowledge_dir: Path, filename: str) -> Path | None:
+    candidates = [
+        knowledge_dir / "compliance_knowledge" / filename,
+        knowledge_dir / filename,
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+def screen_watchlist(
+    customer_data: dict,
+    knowledge_dir: Path,
+) -> list[dict]:
+
+    findings: list[dict] = []
+
+    customer_name = normalize_name(
+        customer_data.get("name", "")
+    )
+
+    if not customer_name:
+        return findings
+
+    file_path = resolve_knowledge_file(
+        knowledge_dir,
+        "watchlist.csv",
+    )
+
+    if not file_path:
+        return findings
+
+    with file_path.open(
+        encoding="utf-8",
+    ) as file:
+
+        reader = csv.DictReader(file)
+
+        for row in reader:
+
+            candidate = normalize_name(
+                row.get("name", "")
+            )
+
+            similarity = fuzz.token_sort_ratio(
+                customer_name,
+                candidate,
+            )
+
+            if similarity >= MATCH_THRESHOLD:
+
+                findings.append(
+                    {
+                        "source": "watchlist",
+                        "matched_name": row.get(
+                            "name",
+                            "",
+                        ),
+                        "risk": row.get(
+                            "risk",
+                            "MEDIUM",
+                        ),
+                        "reason": row.get(
+                            "reason",
+                            "",
+                        ),
+                        "similarity": similarity,
+                    }
+                )
+
+    return findings
+
+def screen_blacklist(
+    customer_data: dict,
+    knowledge_dir: Path,
+) -> list[dict]:
+
+    findings: list[dict] = []
+
+    customer_name = normalize_name(
+        customer_data.get("name", "")
+    )
+
+    if not customer_name:
+        return findings
+
+    file_path = resolve_knowledge_file(
+        knowledge_dir,
+        "blacklist.csv",
+    )
+
+    if not file_path:
+        return findings
+
+    with file_path.open(
+        encoding="utf-8",
+    ) as file:
+
+        reader = csv.DictReader(file)
+
+        for row in reader:
+
+            candidate = normalize_name(
+                row.get("name", "")
+            )
+
+            similarity = fuzz.token_sort_ratio(
+                customer_name,
+                candidate,
+            )
+
+            if similarity >= MATCH_THRESHOLD:
+
+                findings.append(
+                    {
+                        "source": "blacklist",
+                        "matched_name": row.get(
+                            "name",
+                            "",
+                        ),
+                        "risk": row.get(
+                            "risk",
+                            "HIGH",
+                        ),
+                        "reason": row.get(
+                            "reason",
+                            "",
+                        ),
+                        "similarity": similarity,
+                    }
+                )
+
+    return findings
+
+def screen_pep(
+    customer_data: dict,
+    knowledge_dir: Path,
+) -> list[dict]:
+
+    findings: list[dict] = []
+
+    customer_name = normalize_name(
+        customer_data.get("name", "")
+    )
+
+    if not customer_name:
+        return findings
+
+    file_path = resolve_knowledge_file(
+        knowledge_dir,
+        "pep.csv",
+    )
+
+    if not file_path:
+        return findings
+
+    with file_path.open(
+        encoding="utf-8",
+    ) as file:
+
+        reader = csv.DictReader(file)
+
+        for row in reader:
+
+            candidate = normalize_name(
+                row.get("name", "")
+            )
+
+            similarity = fuzz.token_sort_ratio(
+                customer_name,
+                candidate,
+            )
+
+            if similarity >= MATCH_THRESHOLD:
+
+                findings.append(
+                    {
+                        "source": "pep",
+                        "matched_name": row.get(
+                            "name",
+                            "",
+                        ),
+                        "designation": row.get(
+                            "designation",
+                            "",
+                        ),
+                        "country": row.get(
+                            "country",
+                            "",
+                        ),
+                        "risk": row.get(
+                            "risk",
+                            "HIGH",
+                        ),
+                        "similarity": similarity,
+                    }
+                )
+
+    return findings
+
 def retrieve_compliance_context(
     customer_data: dict,
     findings: list[dict],
@@ -169,12 +369,4 @@ def run_compliance_screening(
         },
     }
 
-def resolve_knowledge_file(knowledge_dir: Path, filename: str) -> Path | None:
-    candidates = [
-        knowledge_dir / "compliance_knowledge" / filename,
-        knowledge_dir / filename,
-    ]
-    for path in candidates:
-        if path.exists():
-            return path
-    return None
+
