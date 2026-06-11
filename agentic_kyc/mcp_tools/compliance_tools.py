@@ -217,8 +217,8 @@ def retrieve_compliance_context(
     knowledge_dir: Path,
 ) -> list[dict]:
 
-    if not findings:
-        return []
+    # if not findings:
+    #     return []
 
     try:
         qdrant = get_qdrant()
