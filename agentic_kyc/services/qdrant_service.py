@@ -78,6 +78,11 @@ class QdrantService:
 
     def load_compliance_knowledge(self, knowledge_dir: str | Path) -> int:
         knowledge_dir = Path(knowledge_dir)
+
+        # Prevent duplicate loading
+        if self.count() > 0:
+            return self.count()
+
         documents: list[dict] = []
 
 # Watchlist, blacklist and PEP datasets are used only for deterministic screening.

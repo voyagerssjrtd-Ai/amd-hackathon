@@ -204,6 +204,7 @@ def screen_pep(
                             "risk",
                             "HIGH",
                         ),
+                        "reason": f"PEP match: {row.get('designation', '')}",
                         "similarity": similarity,
                     }
                 )
@@ -234,47 +235,17 @@ def retrieve_compliance_context(
             }
         ]
 
-    query_parts: list[str] = []
+    query_parts = []
 
     for finding in findings:
-        query_parts.append(
-            finding.get("source", "")
-        )
-        query_parts.append(
-            finding.get("reason", "")
-        )
-        query_parts.append(
-            finding.get("risk", "")
-        )
+        query_parts.append(finding.get("source", ""))
+        query_parts.append(finding.get("reason", ""))
 
-    for key in [
-        "name",
-        "dob",
-        "pan_number",
-        "address",
-    ]:
-        value = str(
-            customer_data.get(key, "") or ""
-        ).strip()
+    for key in ["name", "pan_number", "dob"]:
+        value = str(customer_data.get(key, "") or "").strip()
 
         if value:
-            query_parts.append(
-                f"{key}: {value}"
-            )
-
-    for key in [
-        "pan_text",
-        "aadhaar_text",
-        "document_text",
-    ]:
-        value = str(
-            customer_data.get(key, "") or ""
-        ).strip()
-
-        if value:
-            query_parts.append(
-                value[:1000]
-            )
+            query_parts.append(value)
 
     fraud_terms = [
         "sample only",
@@ -299,17 +270,23 @@ def retrieve_compliance_context(
             )
 
     if not query_parts:
-        query_parts.append(
-            "standard kyc onboarding requirements"
-        )
+            query_parts.append(
+                "customer due diligence aml policy rbi guideline"
+            )
 
     query = " ".join(query_parts)
 
     try:
-        return qdrant.search(
+        results = qdrant.search(
             query=query,
             limit=5,
         )
+
+        return [
+            item
+            for item in results
+            if item.get("score", 0) >= 0.70
+        ]
 
     except Exception as exc:
         return [
@@ -352,7 +329,7 @@ def run_compliance_screening(
         findings=findings,
         knowledge_dir=knowledge_dir,
     )
-
+    
     return {
         "status": (
             "REVIEW"
