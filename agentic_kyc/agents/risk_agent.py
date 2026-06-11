@@ -169,7 +169,7 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
             factors.append(
                 {
                     "factor": "Moderate financial risk",
-                    "impact": 10,
+                    "impact": 5,
                     "evidence": financial,
                 }
             )
@@ -188,10 +188,7 @@ def add_factor_breakdown(result: dict, payload: dict) -> dict:
     compliance,
 )
 
-    score = max(
-        int(result.get("risk_score", 0)),
-        factor_score,
-    )
+    score = factor_score
     result["risk_score"] = score
     result["risk_level"] = "HIGH" if score >= 75 else "MEDIUM" if score >= 40 else "LOW"
     result["factors"] = factors

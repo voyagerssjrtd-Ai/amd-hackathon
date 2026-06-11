@@ -124,23 +124,47 @@ class QdrantService:
         self.client.upsert(collection_name=self.COLLECTION_NAME, points=points)
         return len(points)
 
-    def search(self, query: str, limit: int = 5) -> list[dict]:
-        self.initialize_if_needed()
-        if not query.strip():
-            return []
+def search(self, query: str, limit: int = 5) -> list[dict]:
+    self.initialize_if_needed()
 
-        embedding = self.encoder.encode(query, normalize_embeddings=True).tolist()
-        results = self.client.search(collection_name=self.COLLECTION_NAME, query=embedding, limit=limit)
-        return [
-            {
-                "score": round(float(result.score), 4),
-                "source": result.payload.get("source", "UNKNOWN"),
-                "content": result.payload.get("content", ""),
-                "risk": result.payload.get("risk", "UNKNOWN"),
-            }
-            for result in results
-        ]
+    if not query.strip():
+        return []
 
+    embedding = (
+        self.encoder.encode(
+            query,
+            normalize_embeddings=True,
+        )
+        .tolist()
+    )
+
+    results = (
+        self.client.query_points(
+            collection_name=self.COLLECTION_NAME,
+            query=embedding,
+            limit=limit,
+        )
+        .points
+    )
+
+    return [
+        {
+            "score": round(float(point.score), 4),
+            "source": point.payload.get(
+                "source",
+                "UNKNOWN",
+            ),
+            "content": point.payload.get(
+                "content",
+                "",
+            ),
+            "risk": point.payload.get(
+                "risk",
+                "UNKNOWN",
+            ),
+        }
+        for point in results
+    ]
     def count(self) -> int:
         self.initialize_if_needed()
         info = self.client.get_collection(collection_name=self.COLLECTION_NAME)

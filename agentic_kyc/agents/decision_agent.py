@@ -32,19 +32,50 @@ def fallback_decision(state: dict) -> dict:
     risk = state.get("risk_result", {})
     compliance = state.get("compliance_result", {})
     identity = state.get("identity_result", {})
+
     score = int(risk.get("risk_score", 100))
     findings = compliance.get("findings", [])
     identity_score = int(identity.get("identity_match_score", 0))
 
-    if any(item.get("source") == "blacklist" for item in findings) or score >= 80:
+    if any(
+        item.get("source") == "blacklist"
+        for item in findings
+    ) or score >= 80:
+
         recommendation = "ESCALATE"
-        explanation = "High risk or blacklist evidence requires compliance escalation."
-    elif findings or score >= 40 or identity_score < 85:
+
+        explanation = (
+            "High risk or blacklist evidence "
+            "requires compliance escalation."
+        )
+
+    elif findings or score >= 40:
+
         recommendation = "REVIEW"
-        explanation = "One or more identity, compliance, or risk indicators require human review."
+
+        explanation = (
+            "One or more compliance or "
+            "risk indicators require human review."
+        )
+
+    elif identity_score < 60:
+
+        recommendation = "REVIEW"
+
+        explanation = (
+            "Low identity confidence "
+            "requires manual verification."
+        )
+
     else:
+
         recommendation = "APPROVE"
-        explanation = "Identity evidence is consistent and simulated compliance screening is clear."
+
+        explanation = (
+            "Identity evidence is consistent, "
+            "compliance screening is clear, "
+            "and explainable risk is acceptable."
+        )
 
     result = {
         "recommendation": recommendation,
@@ -57,18 +88,23 @@ def fallback_decision(state: dict) -> dict:
             "finding_count": len(findings),
         },
     }
+
     return enforce_decision_gates(
         result,
         {
-            "extracted_data": state.get("extracted_data", {}),
-            "pan_data": state.get("pan_data", {}),
+            "extracted_data": state.get(
+                "extracted_data",
+                {},
+            ),
+            "pan_data": state.get(
+                "pan_data",
+                {},
+            ),
             "compliance_result": compliance,
             "risk_result": risk,
             "identity_result": identity,
         },
     )
-
-
 def enforce_decision_gates(result: dict, payload: dict) -> dict:
     extracted = payload.get("extracted_data", {})
     pan_data = payload.get("pan_data", {})
