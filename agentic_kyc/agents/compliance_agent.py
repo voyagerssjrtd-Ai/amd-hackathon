@@ -7,8 +7,10 @@ from services.llm_service import LLMService
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
+
 def run_compliance_agent(state: dict) -> dict:
     data = state.get("extracted_data", {})
+
     compliance_input = {
         **data,
         "pan_text": state.get("pan_text", ""),
@@ -21,32 +23,60 @@ def run_compliance_agent(state: dict) -> dict:
             ]
         ),
     }
+
     tool_result = run_compliance_screening(
         customer_data=compliance_input,
         knowledge_dir=ROOT_DIR / "data",
     )
-    findings = tool_result["findings"]
+
+    findings = tool_result.get("findings", [])
+
     payload = {
-        "customer": data,
+        "customer": compliance_input,
         "candidate_findings": findings,
         "rag_context": tool_result.get("rag_context", []),
         "tool_evidence": tool_result,
     }
+
     try:
-        result = enforce_compliance_gates(LLMService().assess_compliance(payload), findings)
+        llm_result = LLMService().assess_compliance(payload)
+
+        result = enforce_compliance_gates(
+            llm_result,
+            findings,
+        )
+
     except Exception:
-        result = {"status": "REVIEW" if findings else "CLEAR", "findings": findings, "tool_evidence": tool_result}
+        result = enforce_compliance_gates(
+            {},
+            findings,
+        )
+
     result["tool_evidence"] = tool_result
-    result["rag_context"] = tool_result.get("rag_context", [])
+    result["rag_context"] = tool_result.get(
+        "rag_context",
+        [],
+    )
+
     timeline = state.get("timeline", [])
+
     timeline.append(
         {
             "agent": "Compliance Agent",
             "status": "completed",
-            "summary": f"Screened watchlist, blacklist, PEP, and retrieved {len(result['rag_context'])} RAG context items.",
+            "summary": (
+                f"{len(findings)} screening findings; "
+                f"{len(result['rag_context'])} compliance knowledge "
+                f"items retrieved."
+            ),
         }
     )
-    return {**state, "compliance_result": result, "timeline": timeline}
+
+    return {
+        **state,
+        "compliance_result": result,
+        "timeline": timeline,
+    }
 
 
 def enforce_compliance_gates(
@@ -54,10 +84,20 @@ def enforce_compliance_gates(
     findings: list[dict],
 ) -> dict:
 
-    if any(str(item.get("source", "")).lower() == "blacklist" for item in findings):
+    result = result or {}
+
+    sources = {
+        str(item.get("source", "")).upper()
+        for item in findings
+    }
+
+    if "BLACKLIST" in sources:
         result["status"] = "ESCALATE"
 
-    elif findings:
+    elif "WATCHLIST" in sources:
+        result["status"] = "ESCALATE"
+
+    elif "PEP" in sources:
         result["status"] = "REVIEW"
 
     else:

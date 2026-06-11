@@ -74,25 +74,9 @@ class QdrantService:
     def load_compliance_knowledge(self, knowledge_dir: str | Path) -> int:
         knowledge_dir = Path(knowledge_dir)
         documents: list[dict] = []
-
-        for csv_name, source in [
-            ("watchlist.csv", "WATCHLIST"),
-            ("blacklist.csv", "BLACKLIST"),
-            ("pep.csv", "PEP"),
-        ]:
-            path = knowledge_dir / csv_name
-            if path.exists():
-                with path.open(encoding="utf-8") as file:
-                    for row in csv.DictReader(file):
-                        content = " | ".join(f"{key}: {value}" for key, value in row.items() if value)
-                        if content:
-                            documents.append(
-                                {
-                                    "source": source,
-                                    "content": content,
-                                    "risk": row.get("risk") or row.get("severity") or "MEDIUM",
-                                }
-                            )
+        
+# Watchlist, blacklist and PEP datasets are used only for deterministic screening.
+# They should NOT be indexed into Qdrant.
 
         fraud_file = knowledge_dir / "fraud_cases.csv"
         if fraud_file.exists():

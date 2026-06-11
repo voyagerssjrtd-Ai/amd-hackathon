@@ -10,189 +10,20 @@ from services.qdrant_manager import get_qdrant
 
 MATCH_THRESHOLD = 90
 
-
-def screen_watchlist(
-    customer_data: dict,
-    knowledge_dir: Path,
-) -> list[dict]:
-
-    findings: list[dict] = []
-
-    customer_name = normalize_name(
-        customer_data.get("name", "")
-    )
-
-    if not customer_name:
-        return findings
-
-    file_path = resolve_knowledge_file(knowledge_dir, "watchlist.csv")
-
-    if file_path is None:
-        return findings
-
-    with file_path.open(
-        encoding="utf-8",
-    ) as file:
-
-        reader = csv.DictReader(file)
-
-        for row in reader:
-
-            candidate = normalize_name(
-                row.get("name", "")
-            )
-
-            similarity = fuzz.token_sort_ratio(
-                customer_name,
-                candidate,
-            )
-
-            if similarity >= MATCH_THRESHOLD:
-
-                findings.append(
-                    {
-                        "source": "watchlist",
-                        "matched_name": row.get("name", ""),
-                        "risk": row.get(
-                            "risk",
-                            "MEDIUM",
-                        ),
-                        "reason": row.get(
-                            "reason",
-                            "",
-                        ),
-                        "similarity": similarity,
-                    }
-                )
-
-    return findings
-
-
-def screen_blacklist(
-    customer_data: dict,
-    knowledge_dir: Path,
-) -> list[dict]:
-
-    findings: list[dict] = []
-
-    customer_name = normalize_name(
-        customer_data.get("name", "")
-    )
-
-    if not customer_name:
-        return findings
-
-    file_path = resolve_knowledge_file(knowledge_dir, "blacklist.csv")
-
-    if file_path is None:
-        return findings
-
-    with file_path.open(
-        encoding="utf-8",
-    ) as file:
-
-        reader = csv.DictReader(file)
-
-        for row in reader:
-
-            candidate = normalize_name(
-                row.get("name", "")
-            )
-
-            similarity = fuzz.token_sort_ratio(
-                customer_name,
-                candidate,
-            )
-
-            if similarity >= MATCH_THRESHOLD:
-
-                findings.append(
-                    {
-                        "source": "blacklist",
-                        "matched_name": row.get("name", ""),
-                        "risk": row.get(
-                            "risk",
-                            "HIGH",
-                        ),
-                        "reason": row.get(
-                            "reason",
-                            "",
-                        ),
-                        "similarity": similarity,
-                    }
-                )
-
-    return findings
-
-
-def screen_pep(
-    customer_data: dict,
-    knowledge_dir: Path,
-) -> list[dict]:
-
-    findings: list[dict] = []
-
-    customer_name = normalize_name(
-        customer_data.get("name", "")
-    )
-
-    if not customer_name:
-        return findings
-
-    file_path = resolve_knowledge_file(knowledge_dir, "pep.csv")
-
-    if file_path is None:
-        return findings
-
-    with file_path.open(
-        encoding="utf-8",
-    ) as file:
-
-        reader = csv.DictReader(file)
-
-        for row in reader:
-
-            candidate = normalize_name(
-                row.get("name", "")
-            )
-
-            similarity = fuzz.token_sort_ratio(
-                customer_name,
-                candidate,
-            )
-
-            if similarity >= MATCH_THRESHOLD:
-
-                findings.append(
-                    {
-                        "source": "pep",
-                        "matched_name": row.get("name", ""),
-                        "designation": row.get(
-                            "designation",
-                            "",
-                        ),
-                        "country": row.get(
-                            "country",
-                            "",
-                        ),
-                        "risk": row.get(
-                            "risk",
-                            "HIGH",
-                        ),
-                        "similarity": similarity,
-                    }
-                )
-
-    return findings
-
-
 def retrieve_compliance_context(
     customer_data: dict,
     findings: list[dict],
     knowledge_dir: Path,
 ) -> list[dict]:
+
     try:
         qdrant = get_qdrant()
+
+        if qdrant.count() == 0:
+            qdrant.load_compliance_knowledge(
+                knowledge_dir,
+            )
+
     except Exception as exc:
         return [
             {
@@ -203,60 +34,47 @@ def retrieve_compliance_context(
             }
         ]
 
-    #
-    # Auto-ingest on first run
-    #
-
-    knowledge_path = knowledge_dir / "compliance_knowledge"
-    if not knowledge_path.exists():
-        knowledge_path = knowledge_dir
-
-    if qdrant.count() == 0:
-
-        qdrant.load_compliance_knowledge(
-            knowledge_path,
-        )
-
-    #
-    # Build semantic query
-    #
-
     query_parts: list[str] = []
 
     for finding in findings:
-
         query_parts.append(
-            finding.get(
-                "source",
-                "",
-            )
+            finding.get("source", "")
         )
         query_parts.append(
-            finding.get(
-                "reason",
-                "",
-            )
+            finding.get("reason", "")
         )
         query_parts.append(
-            finding.get(
-                "risk",
-                "",
-            )
+            finding.get("risk", "")
         )
 
-    for key in ["name", "dob", "pan_number", "address"]:
-        value = str(customer_data.get(key, "") or "").strip()
+    for key in [
+        "name",
+        "dob",
+        "pan_number",
+        "address",
+    ]:
+        value = str(
+            customer_data.get(key, "") or ""
+        ).strip()
+
         if value:
-            query_parts.append(f"{key}: {value}")
+            query_parts.append(
+                f"{key}: {value}"
+            )
 
-    for key in ["pan_text", "aadhaar_text", "document_text"]:
-        value = str(customer_data.get(key, "") or "").strip()
+    for key in [
+        "pan_text",
+        "aadhaar_text",
+        "document_text",
+    ]:
+        value = str(
+            customer_data.get(key, "") or ""
+        ).strip()
+
         if value:
-            query_parts.append(value[:1000])
-
-    #
-    # Fraud indicators
-    #
+            query_parts.append(
+                value[:1000]
+            )
 
     fraud_terms = [
         "sample only",
@@ -275,15 +93,12 @@ def retrieve_compliance_context(
     ).lower()
 
     for term in fraud_terms:
-
         if term in document_text:
-
             query_parts.append(
                 f"fraud indicator {term}"
             )
 
     if not query_parts:
-
         query_parts.append(
             "standard kyc onboarding requirements"
         )
@@ -295,6 +110,7 @@ def retrieve_compliance_context(
             query=query,
             limit=5,
         )
+
     except Exception as exc:
         return [
             {
@@ -304,7 +120,6 @@ def retrieve_compliance_context(
                 "risk": "UNKNOWN",
             }
         ]
-
 
 def run_compliance_screening(
     customer_data: dict,
@@ -333,18 +148,19 @@ def run_compliance_screening(
     )
 
     rag_context = retrieve_compliance_context(
-        customer_data,
-        findings,
-        knowledge_dir,
+        customer_data=customer_data,
+        findings=findings,
+        knowledge_dir=knowledge_dir,
     )
 
     return {
-        "status": "REVIEW" if findings else "CLEAR",
-
+        "status": (
+            "REVIEW"
+            if findings
+            else "CLEAR"
+        ),
         "findings": findings,
-
         "rag_context": rag_context,
-
         "tool_evidence": {
             "watchlist": watchlist,
             "blacklist": blacklist,
@@ -352,7 +168,6 @@ def run_compliance_screening(
             "rag_context": rag_context,
         },
     }
-
 
 def resolve_knowledge_file(knowledge_dir: Path, filename: str) -> Path | None:
     candidates = [

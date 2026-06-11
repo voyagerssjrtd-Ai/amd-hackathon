@@ -134,26 +134,6 @@ You should see `Qwen/Qwen2.5-VL-7B-Instruct`.
 
 For text-only PDF demos, `Qwen/Qwen2.5-7B-Instruct` also works, but it cannot read scanned PDFs or uploaded images.
 
-## Streamlit In JupyterLab
-
-In many JupyterLab hackathon environments, `localhost` is inside the remote container, not your laptop. Start Streamlit with a public bind address:
-
-```bash
-streamlit run app.py \
-  --server.address 0.0.0.0 \
-  --server.port 8501 \
-  --server.headless true \
-  --server.enableCORS false \
-  --server.enableXsrfProtection false
-```
-
-Check that Streamlit is alive inside the environment:
-
-```bash
-curl http://127.0.0.1:8501
-```
-
-If this returns HTML, the app is running.
 
 ## Cloudflare Tunnel For External Demo Link
 
