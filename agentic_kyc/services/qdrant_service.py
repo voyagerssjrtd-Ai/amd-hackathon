@@ -74,7 +74,7 @@ class QdrantService:
     def load_compliance_knowledge(self, knowledge_dir: str | Path) -> int:
         knowledge_dir = Path(knowledge_dir)
         documents: list[dict] = []
-        
+
 # Watchlist, blacklist and PEP datasets are used only for deterministic screening.
 # They should NOT be indexed into Qdrant.
 
@@ -130,7 +130,7 @@ class QdrantService:
             return []
 
         embedding = self.encoder.encode(query, normalize_embeddings=True).tolist()
-        results = self.client.search(collection_name=self.COLLECTION_NAME, query_vector=embedding, limit=limit)
+        results = self.client.search(collection_name=self.COLLECTION_NAME, query=embedding, limit=limit)
         return [
             {
                 "score": round(float(result.score), 4),
